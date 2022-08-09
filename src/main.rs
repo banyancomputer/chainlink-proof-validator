@@ -7,29 +7,30 @@ extern crate serde_json;
 use rocket::serde::{Serialize, Deserialize, json::Json};
 use ethers::providers::{Middleware, Provider, Http};
 use eyre::Result;
+use rocket::http::ContentType;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 struct Valid {
     number: u64,
     result: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 struct Invalid {
     number: String,
     result: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 enum Data {
     Valid(Valid),
     Invalid(Invalid)
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 struct MyResult {
     data: Data
@@ -83,4 +84,42 @@ async fn main() -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rocket::local::blocking::Client;
+    use rocket::http::Status;
+
+    #[test]
+    fn test_even() {
+        let client = Client::tracked(rocket::build().mount("/", routes![check, check2])).expect("valid rocket instance");
+        let response = client.get(uri!(check(2))).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.content_type(), Some(ContentType::JSON));
+        assert_eq!(response.into_json(), 
+                   Some(MyResult{data: Data::Valid(Valid {number: 2, result: "even".to_string()})}));
+    }
+
+    #[test]
+    fn test_odd() {
+        let client = Client::tracked(rocket::build().mount("/", routes![check, check2])).expect("valid rocket instance");
+        let response = client.get(uri!(check(3))).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.content_type(), Some(ContentType::JSON));
+        assert_eq!(response.into_json(), 
+                   Some(MyResult{data: Data::Valid(Valid {number: 3, result: "odd".to_string()})}));
+    }
+
+    #[test]
+    fn test_invalid() {
+        let client = Client::tracked(rocket::build().mount("/", routes![check, check2])).expect("valid rocket instance");
+        let response = client.get(uri!(check2("asdf".to_string()))).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.content_type(), Some(ContentType::JSON));
+        assert_eq!(response.into_json(),
+                   Some(MyResult{data: Data::Invalid(Invalid {number: "asdf".to_string(), result: "invalid".to_string()})}));
+    }
+
 }
