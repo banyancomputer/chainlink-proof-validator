@@ -1,0 +1,19 @@
+[package]
+name = "hello-rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ferris-says = "0.2"
+rocket = { version = "0.5.0-rc.2", features = ["json"] }
+serde = "*"
+serde_json = "*"
+serde_derive = "*"
+ethers = "0.17.0"
+clap = "3.2.16"
+hex = "0.4.3"
+eyre = "0.6.8"
+tokio = "1.20.1"
+
