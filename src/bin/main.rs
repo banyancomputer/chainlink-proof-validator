@@ -8,7 +8,7 @@ use rocket::serde::{Serialize, Deserialize, json::Json};
 use ethers::providers::{Middleware, Provider, Http};
 use ethers::types::{Filter, Address};
 use eyre::Result;
-use rocket::http::ContentType;
+//use bytes::Bytes;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
@@ -61,7 +61,32 @@ fn check2(num: &str) -> Json<MyResult> {
             }) 
         })
 }
+/*
+#[get("/validate")]
+async fn validate() -> Result<Json<MyResult>, ethers::providers::ProviderError> {
+    let provider = Provider::<Http>::try_from(
+        "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+    ).expect("could not instantiate HTTP Provider");
+    let current_block_number = provider.get_block_number().await?;
+    let block_info = provider.get_block(current_block_number).await?;
+    let block_num = serde_json::to_string(&current_block_number)?;
+    let block_hash: String;
+    match block_info {
+        None    => block_hash = String::from(""),
+        Some(h) => block_hash = serde_json::to_string(&h.hash)?
+    }
 
+    //let filter = Filter::new().select(11177037);
+    let filter = Filter::new().select(11177037u64).address("0x097384fa333a457599fb65aa0d931f3a756c3f12".parse::<Address>().unwrap());
+    let block_log = provider.get_logs(&filter).await?;
+
+    println!("Got block: {}", block_num);
+    println!("Block hash: {}", block_hash);
+    println!("LOGS: {:?}", block_log);
+
+    Ok(Json(MyResult { data: Data::Valid(Valid {number: 2, result: "even".to_string()})}))
+}
+*/
 #[rocket::main]
 async fn main() -> Result<()> {
 
@@ -83,7 +108,28 @@ async fn main() -> Result<()> {
 
     println!("Got block: {}", block_num);
     println!("Block hash: {}", block_hash);
-    println!("LOGS: {:?}", block_log);
+    //println!("LOGS: {:?}", block_log);
+
+    //println!("Topics: {:?}", block_log[0].topics);
+    let data = &block_log[0].data;
+    println!("Data: {:?}", data); // byte array of data. I don't know what all the other shit in there is. Size 96
+
+    let var_size = match data.get(31) {
+        None       => panic!("var_size out of bounds"),
+        Some(size) => size
+    };
+    println!("var_size: {}", var_size);
+    let data_size = match data.get(63) {
+        None       => panic!("data_size out of bounds"),
+        Some(size) => size
+    };
+    println!("data_size: {}", data_size);
+    let data_bytes = match data.get(64..96) {
+        None       => panic!("data_bytes out of bounds"),
+        Some(text) => text
+    };
+    let data_text = std::str::from_utf8(data_bytes)?;
+    println!("data_text: {}", data_text);
 
     let _rocket = rocket::build()
         .mount("/", routes![check, check2])
@@ -98,6 +144,7 @@ mod test {
     use super::*;
     use rocket::local::blocking::Client;
     use rocket::http::Status;
+    use rocket::http::ContentType;
 
     #[test]
     fn test_even() {
