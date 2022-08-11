@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
 
     //println!("Topics: {:?}", block_log[0].topics);
     let data = &block_log[0].data;
-    println!("Data: {:?}", data); // byte array of data. I don't know what all the other shit in there is. Size 96
+    //println!("Data: {:?}", data); // byte array of data. I don't know what all the other shit in there is. Size 96
 
     let var_size = match data.get(31) {
         None       => panic!("var_size out of bounds"),
@@ -124,7 +124,8 @@ async fn main() -> Result<()> {
         Some(size) => size
     };
     println!("data_size: {}", data_size);
-    let data_bytes = match data.get(64..96) {
+    let bound: usize = (64 + data_size).into(); 
+    let data_bytes = match data.get(64..bound) {
         None       => panic!("data_bytes out of bounds"),
         Some(text) => text
     };
