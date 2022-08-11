@@ -1,4 +1,5 @@
 const Web3 = require("web3");
+require("dotenv").config();
 
 async function scan(message) {
     process.stdout.write(message);
@@ -66,54 +67,15 @@ async function send(web3, account, transaction) {
 async function run() {
 
     const NODE_ADDRESS = process.env.API_KEY;
+    console.log(`Node address: ${NODE_ADDRESS}`);
     const PRIVATE_KEY  = process.env.PRIVATE_KEY;
     const web3        = new Web3(NODE_ADDRESS);
-    console.log(web3.eth.accounts);
     const account     = web3.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
-    const contract_abi = [
-        {
-            "anonymous": false,
-            "inputs": [
-                {
-                    "indexed": true,
-                    "internalType": "uint256",
-                    "name": "offerId",
-                    "type": "uint256"
-                },
-                {
-                    "indexed": true,
-                    "internalType": "uint256",
-                    "name": "blockNumber",
-                    "type": "uint256"
-                },
-                {
-                    "indexed": false,
-                    "internalType": "bytes",
-                    "name": "proof",
-                    "type": "bytes"
-                }
-            ],
-            "name": "ProofAdded",
-            "type": "event"
-        },
-        {
-            "inputs": [
-                {
-                    "internalType": "bytes",
-                    "name": "_proof",
-                    "type": "bytes"
-                }
-            ],
-            "name": "save_proof",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function"
-        }
-    ]
+    const contract_abi = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"offerId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"blockNumber","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"proof","type":"bytes"}],"name":"ProofAdded","type":"event"},{"inputs":[],"name":"save_proof","outputs":[],"stateMutability":"nonpayable","type":"function"}];
 
-    const contract_address = '0xd9145CCE52D386f254917e481eB44e9943F39138';
+    const contract_address = '0xa1d2A6879370472919cf33F19fa13e798967d2ad';
     const contract    = new web3.eth.Contract(contract_abi, contract_address);
-    const transaction = contract.methods.signAgreement();
+    const transaction = contract.methods.save_proof();
     const receipt     = await send(web3, account, transaction);
     console.log(JSON.stringify(receipt, null, 4));
     if (web3.currentProvider.constructor.name == "WebsocketProvider")
