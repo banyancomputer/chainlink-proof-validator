@@ -5,9 +5,8 @@ contract bao_log {
 
     event ProofAdded(uint256 indexed offerId, uint256 indexed blockNumber, bytes proof);
 
-    function save_proof () public {
-        uint256 offerId = 1;
-        bytes memory _proof = "Jonah and zev to the rescue weeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; 
+    function save_proof (bytes calldata _proof) public {
+        uint256 offerId = 613;
         emit ProofAdded(offerId, block.number, _proof);
     }
 }

@@ -54,22 +54,23 @@ const run = async () => {
     ]
     const contract_address = '0xd9145CCE52D386f254917e481eB44e9943F39138';
     const my_addr = '0x8A4E8e012a5B9EC7817a7936e41DcD84489CE5ed';
-    var bao_contract = new web3.eth.Contract(contract_abi, contract_address);
+    var bao_contract = web3.eth.contract(contract_abi, contract_address);
 
     let txtFile = "bao_slice.txt";
     let proof = fs.readFileSync(txtFile,'utf8');
     var enc = new TextEncoder();
     let _proof = enc.encode(proof)
-    //console.log(_proof);
-    web3.eth.getBalance(my_addr).then(console.log)
-    await window.bao_contract.methods.save_proof(_proof).send({from: my_addr}, 
-    function (err, res) {
-        if (err) {
-          console.log("An error occured", err)
-          return
-        }
-        console.log("Hash of the transaction: " + res)
-      });
+
+
+    let tx = {
+        from: my_addr,
+        to: contract_address,
+        data: await bao_contract.methods.save_proof(_proof).encodeABI()
+     };
+     
+    let signedTx = await this.web3.eth.accounts.signTransaction(tx, PRIVATE_KEY);
+    let result = await this.web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+    console.log(result);
 }
     
 run();
