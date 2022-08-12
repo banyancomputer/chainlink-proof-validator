@@ -101,7 +101,7 @@ fn is_valid(data: &str) -> bool {
 }
 
 /* can change these inputs but as of now 
-   - num: block number
+   - num: block number: 11189427
    - start: starting byte for data in log
    - end: ending byte for data in log
 */
@@ -112,7 +112,7 @@ async fn validate(num: u64, start: usize, end: usize) -> Result<Json<MyResult>, 
         "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
 
-    let filter = Filter::new().select(num).address("0x097384fa333a457599fb65aa0d931f3a756c3f12".parse::<Address>().unwrap());
+    let filter = Filter::new().select(num).address("0x4092b59bc35E5201624358b3Fcf03F881Ffa5c26".parse::<Address>().unwrap());
     let block_log = provider.get_logs(&filter).await?;
     let data = &block_log[0].data;
     let data_bytes = data.get(start..end).ok_or(Error(anyhow::anyhow!("can't get data from {} to {}", start, end)))?;

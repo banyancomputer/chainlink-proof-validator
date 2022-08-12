@@ -8,14 +8,12 @@ move .env.example to .env
 ```bash
 $ mv .env.example .env
 ```
-then add your private key and alchemy API key to .env
+then add your private key and infura API key to .env
 
 
 # usage
-```bash
-$ node call_contract_2.js
-```
+see hardhat_deploy_contract for logging proof 
 
-# contract address
-https://rinkeby.etherscan.io/address/0xa1d2a6879370472919cf33f19fa13e798967d2ad
+# event log
+https://rinkeby.etherscan.io/tx/0x0efedd48646cc64d189554f2106163788b90ae05be99f85e502806af3893d9bb#eventlog
 
