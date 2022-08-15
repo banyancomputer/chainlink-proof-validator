@@ -12,10 +12,6 @@ use eyre;
 use anyhow;
 use std::io::Read;
 use std::str::FromStr;
-use std::env;
-use std::fs::File;
-use bytes::Bytes;
-use ethers::abi::decode;
 
 pub(crate) const CHUNK_SIZE: usize = 1024;
 /* All these structs are for creating a JSON that has a "data" field (so it is 
@@ -149,10 +145,8 @@ async fn validate(num: u64) -> Result<Json<MyResult>, Error> {
         start_index.try_into().unwrap(),
         CHUNK_SIZE.try_into().unwrap(),
     );
-    let response = decoder.read_to_end(&mut decoded).unwrap();
-    let data = "BAO";
-    
-    if (response == 1024) {
+    let response = decoder.read_to_end(&mut decoded).unwrap();    
+    if response == 1024 {
         Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: "valid block".to_string()})}))
     }
     else {
