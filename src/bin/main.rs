@@ -10,7 +10,14 @@ use ethers::providers::{Middleware, Provider, Http};
 use ethers::types::{Filter, Address};
 use eyre;
 use anyhow;
+use std::io::Read;
+use std::str::FromStr;
+use std::env;
+use std::fs::File;
+use bytes::Bytes;
+use ethers::abi::decode;
 
+pub(crate) const CHUNK_SIZE: usize = 1024;
 /* All these structs are for creating a JSON that has a "data" field (so it is 
 compliant with Chainlink EA) and contains the input and the result. Valid is 
 for valid data input, and Invalid is for invalid data input. They do not have 
@@ -105,31 +112,59 @@ fn is_valid(data: &str) -> bool {
    - start: starting byte for data in log
    - end: ending byte for data in log
 */
-#[get("/validate/<num>/<start>/<end>")]
-async fn validate(num: u64, start: usize, end: usize) -> Result<Json<MyResult>, Error> {
+#[get("/validate/<num>")]
+async fn validate(num: u64) -> Result<Json<MyResult>, Error> {
     
     let provider = Provider::<Http>::try_from(
         "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
 
-    let filter = Filter::new().select(num).address("0x4092b59bc35E5201624358b3Fcf03F881Ffa5c26".parse::<Address>().unwrap());
+    let num2 = 11208056u64; // for testing purposes hardcoded
+    let filter = Filter::new().select(num2).address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap());
     let block_log = provider.get_logs(&filter).await?;
+
     let data = &block_log[0].data;
-    let data_bytes = data.get(start..end).ok_or(Error(anyhow::anyhow!("can't get data from {} to {}", start, end)))?;
-    let data = std::str::from_utf8(data_bytes)?;
+    let _data_size = match data.get(32..64) {
+        None       => panic!("data_size out of bounds"),
+        Some(size) => size
+    };
+
+    // Ok I need the hex value of datasize so I can get rid of the hardcoded length of the 
+    // bao file below. data size is an &[u8], and you cant just get the value at 64 data.get(64)
+    // since that is returning only one byte, but the size is denominated over several bytes. 
+
+    let end: usize = 64 + 1672; // (64 + data_size).into();
+    let data_bytes = data.get(64..end).ok_or(Error(anyhow::anyhow!("can't get data from {} to {}", 64, end)))?;
+
+    let hash: bao::Hash = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
+    let start_index = 532480;
+
+    //println!("Hash: {:?}", hash);
+    //println!("data: {:?}", data_bytes);
+
+    let mut decoded = Vec::new();
+    let mut decoder = bao::decode::SliceDecoder::new(
+        data_bytes,
+        &hash,
+        start_index.try_into().unwrap(),
+        CHUNK_SIZE.try_into().unwrap(),
+    );
+    let response = decoder.read_to_end(&mut decoded).unwrap();
+    let data = "BAO";
     
-    if is_valid(data) {
+    if (response == 1024) {
         Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: "valid block".to_string()})}))
     }
     else {
         Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: "invalid block".to_string()})}))
     }
-    
 }
+
 
 #[rocket::main]
 async fn main() -> eyre::Result<()> {
 
+    //env::set_var("RUST_BACKTRACE", "1");
     let _rocket = rocket::build()
         .mount("/", routes![check, check2, validate])
         .launch()
@@ -179,7 +214,7 @@ mod test {
     #[test]
     fn test_validate() {
         let client = Client::tracked(rocket::build().mount("/", routes![validate])).expect("valid rocket instance");
-        let response = client.get(uri!(validate(11177037u64, 64, 91))).dispatch();
+        let response = client.get(uri!(validate(11177037u64))).dispatch();
         assert_eq!(response.status(), Status::Ok);
         assert_eq!(response.content_type(), Some(ContentType::JSON));
         assert_eq!(response.into_json(),
