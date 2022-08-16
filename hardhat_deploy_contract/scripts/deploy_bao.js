@@ -12,13 +12,11 @@ const { exit } = require("node:process");
 
 async function main() {
 
-  let txtFile = "bao_slice_2.txt";
-  let proof = fs.readFileSync(txtFile);
   await hre.run("compile")
-  const transactionResponse = await bao.save_proof(proof);
-  const transactionReceipt = await transactionResponse.wait()
-  console.log(transactionReceipt)
-  console.log(transactionReceipt.events[0].args)
+  const Bao = await hre.ethers.getContractFactory("Bao");
+  const bao = await Bao.deploy();
+  await bao.deployed();
+  console.log(bao.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

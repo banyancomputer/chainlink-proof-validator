@@ -147,10 +147,10 @@ async fn validate(num: u64) -> Result<Json<MyResult>, Error> {
     );
     let response = decoder.read_to_end(&mut decoded).unwrap();    
     if response == 1024 {
-        Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: "valid block".to_string()})}))
+        Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: 1.to_string()})}))
     }
     else {
-        Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: "invalid block".to_string()})}))
+        Ok(Json(MyResult { data: Data::Valid(Valid {number: num, result: 0.to_string()})}))
     }
 }
 

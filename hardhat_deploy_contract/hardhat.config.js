@@ -14,5 +14,9 @@ module.exports = {
         url: "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe",
         accounts: [PRIVATE_KEY]
      },
+     goerli: {
+        url: "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe",
+        accounts: [PRIVATE_KEY]
+     },
   },
 }
