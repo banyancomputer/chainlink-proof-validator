@@ -19,6 +19,7 @@ contract Lock {
         uint256 ipfs_file_cid; 
         uint256 file_size;
         uint256 blake3_checksum;
+        uint256[] proof_blocks;
     }
 
     function createOffer(
@@ -45,11 +46,35 @@ contract Lock {
             deals[_offerId].blake3_checksum = _blake3_checksum;
         }
 
-    function getOffer(uint256 _offerId) public view returns (onChainDealInfo memory) {
-        return deals[_offerId];
+    function getDealStartBlock(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].deal_start_block;
+    }
+    function getDealLengthInBlocks(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].deal_length_in_blocks;
+    }
+    function getProofFrequencyInBlocks(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].proof_frequency_in_blocks;
+    }
+    function getPrice(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].price;
+    }
+    function getCollateral(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].collateral;
+    }
+    function getErc20TokenDenomination(uint256 _offerId) public view returns (address) {
+        return deals[_offerId].erc20_token_denomination;
+    }
+    function getIpfsFileCid(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].ipfs_file_cid;
+    }
+    function getFileSize(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].file_size;
+    }
+    function getBlake3Checksum(uint256 _offerId) public view returns (uint256) {
+        return deals[_offerId].blake3_checksum;
     }
 
-     function save_proof (bytes calldata _proof) public {
+    function save_proof (bytes calldata _proof) public {
         emit ProofAdded(613, block.number, _proof);
     }
 }
