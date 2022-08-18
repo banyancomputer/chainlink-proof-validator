@@ -33,7 +33,7 @@ use rocket::serde::{Serialize, Deserialize, json::{Json, from_str}};
 use rocket::{response, Request};
 //use rocket::http::Status;
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address},
+             types::{Filter, H160, H256, Address},
              contract::Contract,
              abi::Abi};
 use eyre;
@@ -42,10 +42,11 @@ use std::io::Read;
 use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder};
 use math;
+use cid::Cid;
 
 mod types;
 
-use types::{OnChainDealInfo, DealID, BlockNum};
+use types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token};
 
 pub(crate) const CHUNK_SIZE: usize = 1024;
 
@@ -179,27 +180,47 @@ struct MyResult {
 /*
     Gets the deal info from on chain.
 */
-async fn get_deal_info(request: ChainlinkRequest) -> Result<OnChainDealInfo, Error> {
-
+#[post("/getdealinfo", format = "json", data = "<request>")]
+async fn getdealinfo(request: Json<ChainlinkRequest>) -> Result<Json<OnChainDealInfo>, Error> {
     let deal_id: DealID = DealID(request.data.offer_id);
     let client = Provider::<Http>::try_from(
-        "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0x552EC752a8Da5BDB2987903e39Dee29d392ED2D0".parse::<Address>()?; //address of escrow contract
+    let address = "0x464cBd3d0D8A2872cf04306c133118Beb5711111".parse::<Address>()?; //address of escrow contract
     let abi: Abi = serde_json::from_str(r#"[{"inputs":[{"internalType":"string","name":"value","type":"string"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"author","type":"address"},{"indexed":true,"internalType":"address","name":"oldAuthor","type":"address"},{"indexed":false,"internalType":"string","name":"oldValue","type":"string"},{"indexed":false,"internalType":"string","name":"newValue","type":"string"}],"name":"ValueChanged","type":"event"},{"inputs":[],"name":"getValue","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastSender","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"value","type":"string"}],"name":"setValue","outputs":[],"stateMutability":"nonpayable","type":"function"}]"#)?;
     let contract = Contract::new(address, abi, client);
-    let offer = contract
-        .method::<_, OnChainDealInfo>("getOffer", deal_id.0)?
+    
+    let deal_start_block: u64 = contract
+        .method::<_, u64>("getDealStartBlock", deal_id.0)?
         .call()
         .await?;
-    
 
-    let deal_info = offer;
-    Ok(deal_info)
+    let deal_length_in_blocks: u64 = contract
+        .method::<_, u64>("getDealLengthInBlocks", deal_id.0)?
+        .call()
+        .await?;
+
+    println!("Deal start block: {}", deal_start_block);
+    println!("Deal length in blocks: {}", deal_length_in_blocks);
+
+    /*let deal_info: OnChainDealInfo = OnChainDealInfo { 
+        deal_id: deal_id, 
+        deal_start_block: BlockNum(deal_start_block), 
+        deal_length_in_blocks: BlockNum(deal_length_in_blocks), 
+        proof_frequency_in_blocks: BlockNum(4u64), 
+        price: TokenAmount(5u64), 
+        collateral: TokenAmount(6u64), 
+        erc20_token_denomination: Token(H160(0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea as [u8; 20])), 
+        ipfs_file_cid: Cid(8u64), 
+        file_size: 10u64, 
+        blake3_checksum: bao::Hash(10) 
+    };*/
+
+    Err(Error(anyhow!("bleh")))
 }
 
 // check about timeouts with chainlink 
-
+/* 
 #[post("/validate", format = "json", data = "<input_data>")]
 async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error> {
 
@@ -226,7 +247,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
         true => cancellation_block + deal_info.deal_start_block
     };
 
-    let window_size: u64 = 1; // need to figure out how to get this
+    let window_size: u64 = 5; // need to figure out how to get this
     
     let num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
 
@@ -234,7 +255,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
                       data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
                       result: true }))
 }
-
+*/
 #[post("/validatefake", format = "json", data = "<input_data>")]
 async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTest>, Error> {
     println!("Running validate");
@@ -284,10 +305,11 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
 
 #[rocket::main]
 async fn main() -> eyre::Result<()> {
+    //let request: ChainlinkRequest = ChainlinkRequest { id: 0, data: RequestData { offer_id: 5378008} };
 
     //env::set_var("RUST_BACKTRACE", "1");
     let _rocket = rocket::build()
-        .mount("/", routes![check, check2, validatefake, validate])
+        .mount("/", routes![check, check2, validatefake, getdealinfo])
         .launch()
         .await?;
 
@@ -343,7 +365,7 @@ mod test {
             data: test_stuff
         };
         let test_data = serde_json::to_string(&test_input).unwrap();
-        let client: Client = Client::tracked(rocket::build().mount("/", routes![validate])).expect("valid rocket instance");
+        let client: Client = Client::tracked(rocket::build().mount("/", routes![getdealinfo])).expect("valid rocket instance");
         let response = client.post(uri!(validatefake())).header(ContentType::JSON).body(test_data).dispatch();
         assert_eq!(response.status(), Status::Ok);
         assert_eq!(response.content_type(), Some(ContentType::JSON));
