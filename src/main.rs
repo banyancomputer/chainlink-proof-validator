@@ -21,26 +21,31 @@
    to identify the computation performed back to chain
 */
 
+//cast send 0xabc123 "saveProof(uint256 offerId, bytes memory _proof)" 3 --rpc-url https://eth-mainnet.alchemyapi.io (--private-key=abc123)
+
 #[macro_use] 
 extern crate rocket;
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-use rocket::serde::{Serialize, Deserialize, json::Json};
+use rocket::serde::{Serialize, Deserialize, json::{Json, from_str}};
 use rocket::{response, Request};
 //use rocket::http::Status;
-use ethers::providers::{Middleware, Provider, Http};
-use ethers::types::{Filter, H256};
+use ethers::{providers::{Middleware, Provider, Http},
+             types::{Filter, H256, Address},
+             contract::Contract,
+             abi::Abi};
 use eyre;
-use anyhow;
+use anyhow::anyhow;
 use std::io::Read;
 use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder};
+use math;
 
 mod types;
 
-use types::OnChainDealInfo;
+use types::{OnChainDealInfo, DealID, BlockNum};
 
 pub(crate) const CHUNK_SIZE: usize = 1024;
 
@@ -141,14 +146,14 @@ struct InputDataTest {
     data: DataTest
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(crate = "rocket::serde")]
 struct ChainlinkRequest {
     id: u64,
     data: RequestData
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(crate = "rocket::serde")]
 struct RequestData {
     offer_id: u64
@@ -167,15 +172,30 @@ struct ResponseData {
 struct MyResult {
     job_run_id: u64,
     data: ResponseData,
-    //status: Status,
+    //status: rocket::http::Status,
     result: bool
 }
 
 /*
     Gets the deal info from on chain.
 */
-fn get_deal_info(request: Json<ChainlinkRequest>) -> OnChainDealInfo {
-    todo!()
+async fn get_deal_info(request: ChainlinkRequest) -> Result<OnChainDealInfo, Error> {
+
+    let deal_id: DealID = DealID(request.data.offer_id);
+    let client = Provider::<Http>::try_from(
+        "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+    ).expect("could not instantiate HTTP Provider");
+    let address = "0x552EC752a8Da5BDB2987903e39Dee29d392ED2D0".parse::<Address>()?; //address of escrow contract
+    let abi: Abi = serde_json::from_str(r#"[{"inputs":[{"internalType":"string","name":"value","type":"string"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"author","type":"address"},{"indexed":true,"internalType":"address","name":"oldAuthor","type":"address"},{"indexed":false,"internalType":"string","name":"oldValue","type":"string"},{"indexed":false,"internalType":"string","name":"newValue","type":"string"}],"name":"ValueChanged","type":"event"},{"inputs":[],"name":"getValue","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastSender","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"value","type":"string"}],"name":"setValue","outputs":[],"stateMutability":"nonpayable","type":"function"}]"#)?;
+    let contract = Contract::new(address, abi, client);
+    let offer = contract
+        .method::<_, OnChainDealInfo>("getOffer", deal_id.0)?
+        .call()
+        .await?;
+    
+
+    let deal_info = offer;
+    Ok(deal_info)
 }
 
 // check about timeouts with chainlink 
@@ -184,22 +204,31 @@ fn get_deal_info(request: Json<ChainlinkRequest>) -> OnChainDealInfo {
 async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error> {
 
     let provider = Provider::<Http>::try_from(
-        "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
 
     // getting deal info from on chain
-    let deal_info = get_deal_info(input_data);
+    let request: ChainlinkRequest = input_data.into_inner();
+    let deal_info = get_deal_info(request).await?;
 
     // checking that deal is either finished or cancelled
     let current_block_num = provider.get_block_number().await?;
-    let finished = current_block_num > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
+    let finished = BlockNum(current_block_num.as_u64()) > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
     let cancelled = false; // need to figure out how to get this
-    let cancellation_block = 0; // need to figure out how to get this
+
+    if !finished && !cancelled {
+        return Err(Error(anyhow!("Deal {} is ongoing", request.data.offer_id)));
+    }
+
+    let cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
     let deal_length_in_blocks = match cancelled {
         false => deal_info.deal_length_in_blocks,
         true => cancellation_block + deal_info.deal_start_block
     };
 
+    let window_size: u64 = 1; // need to figure out how to get this
+    
+    let num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
 
     Ok(Json(MyResult {job_run_id: 0,
                       data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
@@ -210,7 +239,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
 async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTest>, Error> {
     println!("Running validate");
     let provider = Provider::<Http>::try_from(
-        "https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
 
     //let num2 = 11208056u64; // for testing purposes hardcoded
@@ -220,7 +249,7 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
 
     let data = &block_logs[0].data;
     println!("data: {}", data);
-    let data_size = data.get(56..64).ok_or(Error(anyhow::anyhow!("can't get data from 56 to 64")))?;
+    let data_size = data.get(56..64).ok_or(Error(anyhow!("can't get data from 56 to 64")))?;
     println!("data_size: {:?}", data_size);
     let actual_size = BigEndian::read_u64(data_size);
     println!("actual size: {}", actual_size);
@@ -230,7 +259,7 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
     // since that is returning only one byte, but the size is denominated over several bytes. 
 
     let end: usize = (64 + actual_size) as usize;
-    let data_bytes = data.get(64..end).ok_or(Error(anyhow::anyhow!("can't get data from {} to {}", 64, end)))?;
+    let data_bytes = data.get(64..end).ok_or(Error(anyhow!("can't get data from {} to {}", 64, end)))?;
 
     let hash: bao::Hash = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
     let start_index = 532480;
