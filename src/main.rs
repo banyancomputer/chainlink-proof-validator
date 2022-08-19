@@ -29,20 +29,22 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-use rocket::serde::{Serialize, Deserialize, json::{Json, from_str}};
+use rocket::serde::{Serialize, Deserialize, json::{Json}};
 use rocket::{response, Request};
 //use rocket::http::Status;
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H160, H256, Address},
-             contract::Contract,
-             abi::Abi};
+             types::{Filter, H256, Address, U256},
+             contract::{Contract},
+             abi::{Abi}};
 use eyre;
 use anyhow::anyhow;
-use std::io::Read;
-use std::str::FromStr;
+use std::{io::Read,
+          str::FromStr,
+          fs};
 use byteorder::{BigEndian, ByteOrder};
-use math;
+//use math;
 use cid::Cid;
+use multihash::MultihashGeneric;
 
 mod types;
 
@@ -180,47 +182,90 @@ struct MyResult {
 /*
     Gets the deal info from on chain.
 */
-#[post("/getdealinfo", format = "json", data = "<request>")]
-async fn getdealinfo(request: Json<ChainlinkRequest>) -> Result<Json<OnChainDealInfo>, Error> {
+async fn get_deal_info(request: ChainlinkRequest) -> Result<OnChainDealInfo, Error> {
     let deal_id: DealID = DealID(request.data.offer_id);
-    let client = Provider::<Http>::try_from(
+    let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0x464cBd3d0D8A2872cf04306c133118Beb5711111".parse::<Address>()?; //address of escrow contract
-    let abi: Abi = serde_json::from_str(r#"[{"inputs":[{"internalType":"string","name":"value","type":"string"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"author","type":"address"},{"indexed":true,"internalType":"address","name":"oldAuthor","type":"address"},{"indexed":false,"internalType":"string","name":"oldValue","type":"string"},{"indexed":false,"internalType":"string","name":"newValue","type":"string"}],"name":"ValueChanged","type":"event"},{"inputs":[],"name":"getValue","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"lastSender","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"value","type":"string"}],"name":"setValue","outputs":[],"stateMutability":"nonpayable","type":"function"}]"#)?;
-    let contract = Contract::new(address, abi, client);
+    let address = "0x464cBd3d0D8A2872cf04306c133118Beb5711111".parse::<Address>()?; //address of test contract
+    let abi: Abi = serde_json::from_str(fs::read_to_string("src/contract_abi.json").expect("can't read file").as_str())?;
+    let contract = Contract::new(address, abi, provider);
     
-    let deal_start_block: u64 = contract
-        .method::<_, u64>("getDealStartBlock", deal_id.0)?
+    let deal_start_block: BlockNum = BlockNum(contract
+        .method::<_, U256>("getDealStartBlock", deal_id.0)?
+        .call()
+        .await?
+        .as_u64());
+
+    let deal_length_in_blocks: BlockNum = BlockNum(contract
+        .method::<_, U256>("getDealLengthInBlocks", deal_id.0)?
+        .call()
+        .await?
+        .as_u64());
+
+    let proof_frequency_in_blocks: BlockNum = BlockNum(contract
+        .method::<_, U256>("getProofFrequencyInBlocks", deal_id.0)?
+        .call()
+        .await?
+        .as_u64());
+
+    let price: TokenAmount = TokenAmount(contract
+        .method::<_, U256>("getPrice", deal_id.0)?
+        .call()
+        .await?
+        .as_u64());
+
+    let collateral: TokenAmount = TokenAmount(contract
+        .method::<_, U256>("getCollateral", deal_id.0)?
+        .call()
+        .await?
+        .as_u64());
+
+    let erc20_token_denomination: Token = Token(contract
+        .method::<_, Address>("getErc20TokenDenomination", deal_id.0)?
+        .call()
+        .await?);
+
+    let cid_return: U256 = contract
+        .method::<_, U256>("getIpfsFileCid", deal_id.0)?
+        .call()
+        .await?;
+    let multihash = MultihashGeneric::from_bytes(&cid_return.as_u64().to_be_bytes())?;
+    let ipfs_file_cid: Cid = cid::CidGeneric::new_v1(cid_return.as_u64(), multihash);
+
+    let file_size: u64 = contract
+        .method::<_, u64>("getFileSize", deal_id.0)?
         .call()
         .await?;
 
-    let deal_length_in_blocks: u64 = contract
-        .method::<_, u64>("getDealLengthInBlocks", deal_id.0)?
+    /*let blake3_checksum: bao::Hash = contract
+        .method::<_, _>("getBlake3Checksum", deal_id.0)?
         .call()
-        .await?;
+        .await?;*/
+    
+    let blake3_checksum = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
 
-    println!("Deal start block: {}", deal_start_block);
-    println!("Deal length in blocks: {}", deal_length_in_blocks);
-
-    /*let deal_info: OnChainDealInfo = OnChainDealInfo { 
+    let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
-        deal_start_block: BlockNum(deal_start_block), 
-        deal_length_in_blocks: BlockNum(deal_length_in_blocks), 
-        proof_frequency_in_blocks: BlockNum(4u64), 
-        price: TokenAmount(5u64), 
-        collateral: TokenAmount(6u64), 
-        erc20_token_denomination: Token(H160(0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea as [u8; 20])), 
-        ipfs_file_cid: Cid(8u64), 
-        file_size: 10u64, 
-        blake3_checksum: bao::Hash(10) 
-    };*/
+        deal_start_block: deal_start_block, 
+        deal_length_in_blocks: deal_length_in_blocks, 
+        proof_frequency_in_blocks: proof_frequency_in_blocks, 
+        price: price, 
+        collateral: collateral, 
+        erc20_token_denomination: erc20_token_denomination, 
+        ipfs_file_cid: ipfs_file_cid, 
+        file_size: file_size, 
+        blake3_checksum: blake3_checksum
+    };
 
-    Err(Error(anyhow!("bleh")))
+    println!("Deal info: {:?}", deal_info);
+
+    Ok(deal_info)
+
 }
 
 // check about timeouts with chainlink 
-/* 
+ 
 #[post("/validate", format = "json", data = "<input_data>")]
 async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error> {
 
@@ -230,7 +275,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
 
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
-    let deal_info = get_deal_info(request).await?;
+    let deal_info: OnChainDealInfo = get_deal_info(request).await?;
 
     // checking that deal is either finished or cancelled
     let current_block_num = provider.get_block_number().await?;
@@ -241,10 +286,10 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
         return Err(Error(anyhow!("Deal {} is ongoing", request.data.offer_id)));
     }
 
-    let cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
+    let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
     let deal_length_in_blocks = match cancelled {
         false => deal_info.deal_length_in_blocks,
-        true => cancellation_block + deal_info.deal_start_block
+        true => agreed_upon_cancellation_block + deal_info.deal_start_block
     };
 
     let window_size: u64 = 5; // need to figure out how to get this
@@ -255,7 +300,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
                       data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
                       result: true }))
 }
-*/
+
 #[post("/validatefake", format = "json", data = "<input_data>")]
 async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTest>, Error> {
     println!("Running validate");
@@ -309,7 +354,7 @@ async fn main() -> eyre::Result<()> {
 
     //env::set_var("RUST_BACKTRACE", "1");
     let _rocket = rocket::build()
-        .mount("/", routes![check, check2, validatefake, getdealinfo])
+        .mount("/", routes![check, check2, validatefake])
         .launch()
         .await?;
 
@@ -365,7 +410,7 @@ mod test {
             data: test_stuff
         };
         let test_data = serde_json::to_string(&test_input).unwrap();
-        let client: Client = Client::tracked(rocket::build().mount("/", routes![getdealinfo])).expect("valid rocket instance");
+        let client: Client = Client::tracked(rocket::build().mount("/", routes![validatefake])).expect("valid rocket instance");
         let response = client.post(uri!(validatefake())).header(ContentType::JSON).body(test_data).dispatch();
         assert_eq!(response.status(), Status::Ok);
         assert_eq!(response.content_type(), Some(ContentType::JSON));

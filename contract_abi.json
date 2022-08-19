@@ -1,0 +1,118 @@
+[{
+        "type":"function",
+        "inputs": [{
+                "name":"_offerId",
+                "type":"uint256"
+        }],
+        "name":"getDealStartBlock",
+        "outputs": [{
+                "name":"",
+                "type":"uint256"
+        }],
+        "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getDealLengthInBlocks",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getProofFrequencyInBlocks",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getPrice",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getCollateral",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getErc20TokenDenomination",
+    "outputs": [{
+            "name":"",
+            "type":"address"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getIpfsFileCid",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getFileSize",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+},
+{
+    "type":"function",
+    "inputs": [{
+            "name":"_offerId",
+            "type":"uint256"
+    }],
+    "name":"getBlake3Checksum",
+    "outputs": [{
+            "name":"",
+            "type":"uint256"
+    }],
+    "stateMutability":"view"
+}
+]
