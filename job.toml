@@ -1,0 +1,15 @@
+type                = "directrequest"
+schemaVersion       = 1
+evmChainID          = 1
+name                = "example eth request event spec"
+contractAddress     = "0x613a38AC1659769640aaE063C651F48E0250454C"
+observationSource   = """
+ds [type="http"
+              method=POST
+              url="https://ee37-195-250-172-101.eu.ngrok.io"
+              requestData="{\\"block_num\\": $(block_num), \\"offer_id\\": $(offer_id)}"
+              allowUnrestrictedNetworkAccess=true
+              ]
+ds_parse    [type="jsonparse" path="data,Valid,result"]
+ds -> ds_parse
+"""
