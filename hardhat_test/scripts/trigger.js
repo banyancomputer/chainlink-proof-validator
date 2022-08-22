@@ -11,7 +11,7 @@ async function main() {
   
   await hre.run("compile")
   const Bao = await ethers.getContractFactory("Bao");
-  const bao = await Bao.attach("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea"); // WRONG 
+  const bao = await Bao.attach("0x464cBd3d0D8A2872cf04306c133118Beb5711111"); // WRONG 
 
   const transactionResponse = await bao.save_proof(proof);
   const transactionReceipt = await transactionResponse.wait()
