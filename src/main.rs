@@ -149,17 +149,17 @@ struct InputDataTest {
     data: DataTest
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(crate = "rocket::serde")]
 struct ChainlinkRequest {
-    id: u64,
+    id: String,
     data: RequestData
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(crate = "rocket::serde")]
 struct RequestData {
-    offer_id: u64
+    offer_id: String
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -182,13 +182,13 @@ struct MyResult {
 /*
     Gets the deal info from on chain.
 */
-async fn get_deal_info(request: ChainlinkRequest) -> Result<OnChainDealInfo, Error> {
-    let deal_id: DealID = DealID(request.data.offer_id);
+async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, Error> {
+    let deal_id: DealID = DealID(offer_id);
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
     let address = "0x464cBd3d0D8A2872cf04306c133118Beb5711111".parse::<Address>()?; //address of test contract
-    let abi: Abi = serde_json::from_str(fs::read_to_string("src/contract_abi.json").expect("can't read file").as_str())?;
+    let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     
     let deal_start_block: BlockNum = BlockNum(contract
@@ -275,15 +275,17 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
 
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
-    let deal_info: OnChainDealInfo = get_deal_info(request).await?;
+    let offer_id_ = request.data.offer_id.trim().parse::<u64>().unwrap();
+    let deal_info: OnChainDealInfo = get_deal_info(offer_id_).await?;
 
     // checking that deal is either finished or cancelled
     let current_block_num = provider.get_block_number().await?;
     let finished = BlockNum(current_block_num.as_u64()) > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
     let cancelled = false; // need to figure out how to get this
 
+
     if !finished && !cancelled {
-        return Err(Error(anyhow!("Deal {} is ongoing", request.data.offer_id)));
+        return Err(Error(anyhow!("Deal {} is ongoing", offer_id_)));
     }
 
     let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
@@ -309,18 +311,20 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
     ).expect("could not instantiate HTTP Provider");
 
     //let num2 = 11208056u64; // for testing purposes hardcoded
-    let block_num = input_data.data.block_num.parse::<u64>().unwrap();
-    let offer_id = input_data.data.offer_id.parse::<u64>().unwrap();
+    //println!("num: {:}", input_data.data.block_num);
+    //println!("num: {:}", input_data.data.offer_id);
+    let block_num = input_data.data.block_num.trim().parse::<u64>().unwrap();
+    let offer_id = input_data.data.offer_id.trim().parse::<u64>().unwrap();
     let filter = Filter::new().select(block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
     let block_logs = provider.get_logs(&filter).await?;
-    println!("Block logs: {:?}", block_logs);
+    //println!("Block logs: {:?}", block_logs);
 
     let data = &block_logs[0].data;
-    println!("data: {}", data);
+    //println!("data: {}", data);
     let data_size = data.get(56..64).ok_or(Error(anyhow!("can't get data from 56 to 64")))?;
-    println!("data_size: {:?}", data_size);
+    //println!("data_size: {:?}", data_size);
     let actual_size = BigEndian::read_u64(data_size);
-    println!("actual size: {}", actual_size);
+    //println!("actual size: {}", actual_size);
     //let size: usize = usize::from(data_size);
     // Ok I need the hex value of datasize so I can get rid of the hardcoded length of the 
     // bao file below. data size is an &[u8], and you cant just get the value at 64 data.get(64)
@@ -340,7 +344,7 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
         CHUNK_SIZE.try_into().unwrap(),
     );
     let response = decoder.read_to_end(&mut decoded).unwrap();
-    println!("Response: {}", response); 
+    println!("{} bytes read succussfully: Proof Complete", response); 
     if is_valid(response) {
         Ok(Json(MyResultTest { data: OutputDataTest::Valid(Valid {number: block_num, result: "yay!".to_string()})}))
     }
@@ -356,7 +360,7 @@ async fn main() -> eyre::Result<()> {
 
     //env::set_var("RUST_BACKTRACE", "1");
     let _rocket = rocket::build()
-        .mount("/", routes![check, check2, validatefake])
+        .mount("/", routes![check, check2, validatefake, validate])
         .launch()
         .await?;
 
