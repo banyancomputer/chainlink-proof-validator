@@ -3,7 +3,7 @@ use ethers::prelude::Address;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sled::IVec;
-use std::ops::{Add, Mul, Sub, Div};
+use std::ops::{Add, Mul, Sub};
 
 pub fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
     let cid_bytes = cid.to_bytes();

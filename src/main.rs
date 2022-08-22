@@ -44,7 +44,7 @@ use std::{io::Read,
 use byteorder::{BigEndian, ByteOrder};
 //use math;
 use cid::Cid;
-use multihash::MultihashGeneric;
+use multihash::{Multihash, MultihashGeneric};
 
 mod types;
 
@@ -229,21 +229,31 @@ async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, Error> {
     let cid_return: U256 = contract
         .method::<_, U256>("getIpfsFileCid", deal_id.0)?
         .call()
-        .await?;
-    let multihash = MultihashGeneric::from_bytes(&cid_return.as_u64().to_be_bytes())?;
-    let ipfs_file_cid: Cid = cid::CidGeneric::new_v1(cid_return.as_u64(), multihash);
-
+        .await?; //should be memory pointer in solidity
+    let bytes: &[u8; 8] = &cid_return.as_u64().to_be_bytes();
+    let test_bytes = [
+        0x16, 0x40, 0x64, 0x4b, 0xcc, 0x7e, 0x56, 0x43, 0x73, 0x04, 0x09, 0x99, 0xaa, 0xc8, 0x9e,
+        0x76, 0x22, 0xf3, 0xca, 0x71, 0xfb, 0xa1, 0xd9, 0x72, 0xfd, 0x94, 0xa3, 0x1c, 0x3b, 0xfb,
+        0xf2, 0x4e,
+        0x16, 0x20, 0x64, 0x4b, 0xcc, 0x7e, 0x56, 0x43, 0x73, 0x04, 0x09, 0x99, 0xaa, 0xc8, 0x9e,
+        0x76, 0x22, 0xf3, 0xca, 0x71, 0xfb, 0xa1, 0xd9, 0x72, 0xfd, 0x94, 0xa3, 0x1c, 0x3b, 0xfb,
+        0xf2, 0x4e, 
+        0x11, 0x22
+    ];
+    let multihash: Multihash = Multihash::from_bytes(&test_bytes)?;
+    let ipfs_file_cid: Cid = cid::CidGeneric::new_v1(multihash.code(), multihash);
+    
     let file_size: u64 = contract
         .method::<_, u64>("getFileSize", deal_id.0)?
         .call()
         .await?;
 
-    /*let blake3_checksum: bao::Hash = contract
-        .method::<_, _>("getBlake3Checksum", deal_id.0)?
+    let blake3_checksum: String = contract
+        .method::<_, String>("getBlake3Checksum", deal_id.0)?
         .call()
-        .await?;*/
+        .await?; //should also be a memory pointer
     
-    let blake3_checksum = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
+    let blake3_checksum_actual = bao::Hash::from_str(&blake3_checksum).unwrap();
 
     let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
@@ -255,7 +265,7 @@ async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, Error> {
         erc20_token_denomination: erc20_token_denomination, 
         ipfs_file_cid: ipfs_file_cid, 
         file_size: file_size, 
-        blake3_checksum: blake3_checksum
+        blake3_checksum: blake3_checksum_actual
     };
 
     println!("Deal info: {:?}", deal_info);
@@ -282,7 +292,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
     let current_block_num = provider.get_block_number().await?;
     let finished = BlockNum(current_block_num.as_u64()) > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
     let cancelled = false; // need to figure out how to get this
-
+    
 
     if !finished && !cancelled {
         return Err(Error(anyhow!("Deal {} is ongoing", offer_id_)));
@@ -296,7 +306,7 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
 
     let window_size: u64 = 5; // need to figure out how to get this
     
-    let num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
+    let _num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
 
     Ok(Json(MyResult {job_run_id: 0,
                       data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
@@ -405,7 +415,7 @@ mod test {
     }
 
     //11177037u64
-    #[test]
+    /*#[test]
     fn test_validate() {
         let test_stuff: DataTest = DataTest {
             block_num: 11177037u64,
@@ -422,6 +432,6 @@ mod test {
         assert_eq!(response.content_type(), Some(ContentType::JSON));
         assert_eq!(response.into_json(),
                    Some(MyResultTest{data: OutputDataTest::Valid(Valid {number: 11208056u64, result: "yay!".to_string()})}));
-    }
+    }*/
 
 }
