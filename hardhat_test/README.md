@@ -9,6 +9,11 @@ npx hardhat help
 npx hardhat test
 GAS_REPORT=true npx hardhat test
 npx hardhat node
+
 npx hardhat run scripts/deploy.js
 npx hardhat run scripts/deploy.js --network goerli 
+
+if you only want to call functions and not redeploy
+npx hardhat run scripts/trigger.js --network goerli  
+
 ```
