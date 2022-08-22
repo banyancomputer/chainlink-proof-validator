@@ -333,7 +333,7 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
     let data_size = data.get(56..64).ok_or(Error(anyhow!("can't get data from 56 to 64")))?;
     //println!("data_size: {:?}", data_size);
     let actual_size = BigEndian::read_u64(data_size);
-    //println!("actual size: {}", actual_size);
+    println!("actual size: {}", actual_size);
     //let size: usize = usize::from(data_size);
     // Ok I need the hex value of datasize so I can get rid of the hardcoded length of the 
     // bao file below. data size is an &[u8], and you cant just get the value at 64 data.get(64)
