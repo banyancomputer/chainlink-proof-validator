@@ -275,7 +275,7 @@ async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, Error> {
 }
 
 // check about timeouts with chainlink 
- 
+
 #[post("/validate", format = "json", data = "<input_data>")]
 async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error> {
 
@@ -292,7 +292,6 @@ async fn validate(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, 
     let current_block_num = provider.get_block_number().await?;
     let finished = BlockNum(current_block_num.as_u64()) > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
     let cancelled = false; // need to figure out how to get this
-    
 
     if !finished && !cancelled {
         return Err(Error(anyhow!("Deal {} is ongoing", offer_id_)));
