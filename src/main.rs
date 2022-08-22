@@ -138,14 +138,14 @@ fn is_valid(response: usize) -> bool {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 struct DataTest {
-    block_num: u64, //don't need, can get list of relevant blocks from just offerId
-    offer_id: u64
+    block_num: String, //don't need, can get list of relevant blocks from just offerId
+    offer_id: String
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)] //make sure serialize works with u64
 #[serde(crate = "rocket::serde")]
 struct InputDataTest {
-    id: u64,
+    id: String,
     data: DataTest
 }
 
@@ -309,7 +309,9 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
     ).expect("could not instantiate HTTP Provider");
 
     //let num2 = 11208056u64; // for testing purposes hardcoded
-    let filter = Filter::new().select(input_data.data.block_num).topic1(H256::from_low_u64_be(input_data.data.offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
+    let block_num = input_data.data.block_num.parse::<u64>().unwrap();
+    let offer_id = input_data.data.offer_id.parse::<u64>().unwrap();
+    let filter = Filter::new().select(block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
     let block_logs = provider.get_logs(&filter).await?;
     println!("Block logs: {:?}", block_logs);
 
@@ -340,10 +342,10 @@ async fn validatefake(input_data: Json<InputDataTest>) -> Result<Json<MyResultTe
     let response = decoder.read_to_end(&mut decoded).unwrap();
     println!("Response: {}", response); 
     if is_valid(response) {
-        Ok(Json(MyResultTest { data: OutputDataTest::Valid(Valid {number: input_data.data.block_num, result: "yay!".to_string()})}))
+        Ok(Json(MyResultTest { data: OutputDataTest::Valid(Valid {number: block_num, result: "yay!".to_string()})}))
     }
     else {
-        Ok(Json(MyResultTest { data: OutputDataTest::Valid(Valid {number: input_data.data.block_num, result: "oh no!".to_string()})}))
+        Ok(Json(MyResultTest { data: OutputDataTest::Valid(Valid {number: block_num, result: "oh no!".to_string()})}))
     }
 }
 
