@@ -1,23 +1,14 @@
-// We require the Hardhat Runtime Environment explicitly here. This is optional
-// but useful for running the script in a standalone fashion through `node <script>`.
-//
-// You can also run a script with `npx hardhat run <script>`. If you do that, Hardhat
-// will compile your contracts, add the Hardhat Runtime Environment's members to the
-// global scope, and execute the script.
 const hre = require("hardhat");
 const fs = require('fs');
 
 async function main() {
 
-  const Proofs = await hre.ethers.getContractFactory("Proofs");
-  const proofs = await Proofs.deploy();
-  
-  await proofs.deployed();
-  console.log("Proofs deployed to:", proofs.address);
+  const Proofs = await getContractAt("Proofs", "0x86CaEB194efe6EB1B2D96DB5A0575dC38DdeabB6");
+  const proofs = await Proofs.attach();
   
   let offerId = 55378008;
   let deal_start_block = 2; 
-  let deal_length_in_blocks = 3; 
+  let deal_length_in_blocks = 3;
   let proof_frequency_in_blocks = 4; 
   let price = 5; 
   let collateral = 6; 

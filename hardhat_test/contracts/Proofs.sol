@@ -37,30 +37,11 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         uint256[] proof_blocks;
     }
 
-    function createOffer (
-        uint256 _offerId,
-        uint256 _deal_start_block,
-        uint256 _deal_length_in_blocks,
-        uint256 _proof_frequency_in_blocks,
-        uint256 _price,
-        uint256 _collateral,
-        address _erc20_token_denomination,
-        string calldata _ipfs_file_cid,
-        uint256 _file_size,
-        string calldata _blake3_checksum)
+    function createOffer (onChainDealInfo calldata deal)
         public {
-            deals[_offerId].offerId = _offerId;
-            deals[_offerId].deal_start_block = _deal_start_block;
-            deals[_offerId].deal_length_in_blocks = _deal_length_in_blocks;
-            deals[_offerId].proof_frequency_in_blocks = _proof_frequency_in_blocks;
-            deals[_offerId].price = _price;
-            deals[_offerId].collateral = _collateral;
-            deals[_offerId].erc20_token_denomination = _erc20_token_denomination;
-            deals[_offerId].ipfs_file_cid = _ipfs_file_cid;
-            deals[_offerId].file_size = _file_size;
-            deals[_offerId].blake3_checksum = _blake3_checksum;
+            deals[deal.offerId] = deal;
         }
-
+        
     function getDealStartBlock(uint256 _offerId) public view returns (uint256) {
         return deals[_offerId].deal_start_block;
     }
@@ -94,7 +75,7 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
 
     // ISSUE OF block.number in proofs not being the same as the block number the event is emitted to?
     function save_proof (bytes calldata _proof, uint256 _offerId) public {
-        deals[_offerId].proof_blocks[block.number];
+        deals[_offerId].proof_blocks.push(block.number);
         emit ProofAdded(_offerId, block.number, _proof);
     }
 
@@ -128,7 +109,6 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         if (tempEmptyStringTest.length == 0) {
             return 0x0;
         }
-
         assembly {
             // solhint-disable-line no-inline-assembly
             result := mload(add(source, 32))
