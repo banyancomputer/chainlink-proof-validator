@@ -190,6 +190,6 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     let response = decoder.read_to_end(&mut decoded).unwrap();
 
     Ok(Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+                      data: ResponseData { offer_id: 0, success_count: 7, num_windows: 0 },
                       result: true }))
 }
