@@ -4,7 +4,7 @@ use rocket::serde::{/*Serialize, Deserialize,*/ json::{Json}};
 //use rocket::{response, Request};
 //use rocket::http::Status;
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address, U256},
+             types::{Filter, H256, Address, U256, Bytes, PathOrString},
              contract::{Contract},
              abi::{Abi}};
 //use eyre;
@@ -16,6 +16,7 @@ use byteorder::{BigEndian, ByteOrder};
 //use math;
 use cid::Cid;
 use multihash::Multihash;
+use stringreader::StringReader;
 
 use crate::{types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token},
             ChainlinkRequest, MyResult, ResponseData};
@@ -76,35 +77,24 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
         .call()
         .await?);
 
-    let cid_return: U256 = contract
-        .method::<_, U256>("getIpfsFileCid", deal_id.0)?
+    let cid_return: String = contract
+        .method::<_, String>("getIpfsFileCid", deal_id.0)?
         .call()
-        .await?; //should be memory pointer in solidity
-    let bytes: &[u8; 8] = &cid_return.as_u64().to_be_bytes();
-    let test_bytes = [
-        0x16, 0x40, 0x64, 0x4b, 0xcc, 0x7e, 0x56, 0x43, 0x73, 0x04, 0x09, 0x99, 0xaa, 0xc8, 0x9e,
-        0x76, 0x22, 0xf3, 0xca, 0x71, 0xfb, 0xa1, 0xd9, 0x72, 0xfd, 0x94, 0xa3, 0x1c, 0x3b, 0xfb,
-        0xf2, 0x4e,
-        0x16, 0x20, 0x64, 0x4b, 0xcc, 0x7e, 0x56, 0x43, 0x73, 0x04, 0x09, 0x99, 0xaa, 0xc8, 0x9e,
-        0x76, 0x22, 0xf3, 0xca, 0x71, 0xfb, 0xa1, 0xd9, 0x72, 0xfd, 0x94, 0xa3, 0x1c, 0x3b, 0xfb,
-        0xf2, 0x4e, 
-        0x11, 0x22
-    ];
-    let multihash: Multihash = Multihash::from_bytes(&test_bytes)?;
-    let ipfs_file_cid: Cid = cid::CidGeneric::new_v1(multihash.code(), multihash);
+        .await?; 
+    let reader = StringReader::new(&cid_return);
+    let ipfs_file_cid: Cid = cid::CidGeneric::read_bytes(reader)?;
     
     let file_size: u64 = contract
         .method::<_, u64>("getFileSize", deal_id.0)?
         .call()
         .await?;
 
-    /*let blake3_checksum: String = contract
+    let blake3_return: String = contract
         .method::<_, String>("getBlake3Checksum", deal_id.0)?
         .call()
-        .await?;*/ //should also be a memory pointer
+        .await?;
     
-    let blake3_checksum = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
-    //let blake3_checksum_actual = bao::Hash::from_str(&blake3_checksum).unwrap();
+    let blake3_checksum = bao::Hash::from_str(&blake3_return)?;
 
     let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
@@ -125,7 +115,25 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
 
 }
 
-pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, crate::Error> {
+pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
+    Json(MyResult {
+        job_run_id: 0,
+        data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+        status: status,
+        result: reason
+    })
+}
+
+pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
+
+    let mut result = Json(MyResult{job_run_id: 0,
+                                                   data: ResponseData{ offer_id: 0,
+                                                                       success_count: 0,
+                                                                       num_windows: 0
+                                                   },
+                                                   status: 0,
+                                                   result: "".to_string()});
+
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
@@ -133,17 +141,24 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
     let offer_id = request.data.offer_id.trim().parse::<u64>().unwrap();
-    let block_num = request.data.block_num.trim().parse::<u64>().unwrap();
-
-    let deal_info: OnChainDealInfo = get_deal_info(offer_id).await?;
+    let deal_info: OnChainDealInfo = match get_deal_info(offer_id).await {
+        Ok(d) => d,
+        Err(e) => return construct_error(500, format!("{:?}", e))
+    };
 
     // checking that deal is either finished or cancelled
-    let current_block_num = provider.get_block_number().await?;
+    let current_block_num = match provider.get_block_number().await {
+        Ok(num) => num,
+        Err(e) => return construct_error(500, format!("Couldn't get most recent block number: {:?}", e))
+    };
     let finished = BlockNum(current_block_num.as_u64()) > deal_info.deal_start_block + deal_info.deal_length_in_blocks;
     let cancelled = false; // need to figure out how to get this
 
     if !finished && !cancelled {
-        return Err(crate::Error(anyhow!("Deal {} is ongoing", offer_id)));
+        return Json(MyResult {job_run_id: 0,
+                              data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+                              status: 500,
+                              result: format!("Deal {} is not finished or cancelled.", offer_id)});
     }
 
     let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
@@ -159,13 +174,23 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
 
     // SKIP TO END
 
-    let filter = Filter::new().select(block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
-    let block_logs = provider.get_logs(&filter).await?;
+
+    //let block_num = provider.get_block_number().await?;
+    //let block_num = input_data.data.block_num.trim().parse::<u64>().unwrap();
+    //let offer_id = input_data.data.offer_id.trim().parse::<u64>().unwrap();
+    let filter = Filter::new().select(current_block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
+    let block_logs = match provider.get_logs(&filter).await {
+        Ok(l) => l,
+        Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
+    };
     //println!("Block logs: {:?}", block_logs);
 
     let data = &block_logs[0].data;
     //println!("data: {}", data);
-    let data_size = data.get(56..64).ok_or(crate::Error(anyhow!("can't get data from 56 to 64")))?;
+    let data_size = match data.get(56..64) {// .ok_or(crate::Error(anyhow!("can't get data from 56 to 64")))?; 
+        Some(size) => size,
+        None => return construct_error(500, "Couldn't get size of proof data from bytes 56-64 in log".to_string())
+    };
     //println!("data_size: {:?}", data_size);
     let actual_size = BigEndian::read_u64(data_size);
     println!("actual size: {}", actual_size);
@@ -175,8 +200,10 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     // since that is returning only one byte, but the size is denominated over several bytes. 
 
     let end: usize = (64 + actual_size) as usize;
-    let data_bytes = data.get(64..end).ok_or(crate::Error(anyhow!("can't get data from {} to {}", 64, end)))?;
-
+    let data_bytes = match data.get(64..end) {//.ok_or(crate::Error(anyhow!("can't get data from {} to {}", 64, end)))?;
+        Some(bytes) => bytes,
+        None => return construct_error(500, format!("Couldn't get proof data from log. Problem reading bytes 64-{}", end))
+    };
     let hash: bao::Hash = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
     let start_index = 532480;
 
@@ -189,7 +216,8 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     );
     let response = decoder.read_to_end(&mut decoded).unwrap();
 
-    Ok(Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: "7".to_string(), num_windows: 0 },
-                      result: true }))
+    Json(MyResult {job_run_id: 0,
+                      data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+                      status: 200,
+                      result: "".to_string() })
 }

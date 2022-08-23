@@ -77,7 +77,7 @@ pub struct RequestData {
 #[serde(crate = "rocket::serde")]
 pub struct ResponseData {
     pub offer_id: u64,
-    pub success_count: String,
+    pub success_count: u8,
     pub num_windows: u8
 }
 
@@ -86,15 +86,20 @@ pub struct ResponseData {
 pub struct MyResult {
     pub job_run_id: u64,
     pub data: ResponseData,
-    //pub status: rocket::http::Status,
-    pub result: bool
+    pub status: u16,
+    pub result: String
 }
 
 
 // check about timeouts with chainlink 
 
 #[post("/val", format = "json", data = "<input_data>")]
-async fn val(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error> {
+async fn val(input_data: Json<ChainlinkRequest>) -> Json<MyResult> { // NEEDS TO RETURN THE CHAINLINK JSON ALWAYS
+    // NEEDS TO RETURN THE CHAINLINK JSON ALWAYS
+    // NEEDS TO RETURN THE CHAINLINK JSON ALWAYS
+    // NEEDS TO RETURN THE CHAINLINK JSON ALWAYS
+    // need to finish the get_deal_info function, full logic
+    // need to correct the getter functions in get_deal_info
 
     /* Call your own function that returns a Result<Json<MyResult>, Error> */
     validate::validate_deal(input_data).await
@@ -103,7 +108,7 @@ async fn val(input_data: Json<ChainlinkRequest>) -> Result<Json<MyResult>, Error
 
 
 #[rocket::main]
-async fn main() -> eyre::Result<()> {
+async fn main() -> eyre::Result<()> { // NEEDS TO RETURN THE CHAINLINK JSON ALWAYS
 
     let _rocket = rocket::build()
         .mount("/", routes![val])
