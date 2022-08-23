@@ -37,7 +37,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0x464cBd3d0D8A2872cf04306c133118Beb5711111".parse::<Address>()?; //address of test contract
+    let address = "0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532".parse::<Address>()?; //address of test contract
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     
@@ -190,6 +190,6 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     let response = decoder.read_to_end(&mut decoded).unwrap();
 
     Ok(Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: 7, num_windows: 0 },
+                      data: ResponseData { offer_id: 0, success_count: "7".to_string(), num_windows: 0 },
                       result: true }))
 }

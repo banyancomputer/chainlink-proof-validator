@@ -3,9 +3,21 @@ const fs = require('fs');
 
 async function main() {
 
-  const Proofs = await getContractAt("Proofs", "0x86CaEB194efe6EB1B2D96DB5A0575dC38DdeabB6");
-  const proofs = await Proofs.attach();
-  
+  const Proofs = await ethers.getContractFactory("Proofs");
+  const proofs = await Proofs.attach("0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532");
+  console.log(proofs.address);
+
+  const transactionResponse3 = await proofs.verification();
+  console.log("Verification Before:", transactionResponse3);
+
+  const transactionResponse = await proofs.requestVerification("99a3daf9f4a94b319a9c4b9a27d18662","7457561", "55378008");
+  const transactionReceipt = await transactionResponse.wait()
+  console.log(transactionReceipt);
+
+  const transactionResponse2 = await proofs.verification();
+  console.log("Verification After:", transactionResponse2);
+
+  /*
   let offerId = 55378008;
   let deal_start_block = 2; 
   let deal_length_in_blocks = 3;
@@ -28,6 +40,7 @@ async function main() {
   const transactionReceipt = await transactionResponse.wait()
   console.log(transactionReceipt)
   console.log(transactionReceipt.events[0].args)
+  */
 }
 
 // We recommend this pattern to be able to use async/await everywhere

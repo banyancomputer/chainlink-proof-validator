@@ -7,7 +7,7 @@ import '@chainlink/contracts/src/v0.8/ConfirmedOwner.sol';
 contract Proofs is ChainlinkClient, ConfirmedOwner {
     using Chainlink for Chainlink.Request;
 
-    uint256 private verification;
+    uint256 public verification;
     uint256 private fee;
 
     event RequestVerification(bytes32 indexed requestId, uint256 verification);
@@ -81,9 +81,9 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
 
     //  PART 2 j
 
-    function requestVerificatio(string memory _jobId, string memory _blocknum, string memory _offerid) public returns (bytes32 requestId) {
+    function requestVerification(string memory _jobId, string memory _blocknum, string memory _offerid) public returns (bytes32 requestId) {
         Chainlink.Request memory req = buildChainlinkRequest(stringToBytes32(_jobId), address(this), this.fulfill.selector);
-        req.add("block_num", _blocknum);
+        req.add("block_num", _blocknum); // proof blocknum
         req.add("offer_id", _offerid);
         return sendChainlinkRequest(req, fee);
     }
