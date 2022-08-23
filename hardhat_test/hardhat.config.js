@@ -7,7 +7,16 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY
 
 module.exports = {
   solidity: {
-     version: "0.8.9",
+      compilers: [
+        {
+          version: "0.8.9",
+        },
+        {
+          version: "0.7.0",
+          settings: {},
+        },
+      ],
+   },
      settings: {
          optimizer: {
          enabled: true,
@@ -17,7 +26,6 @@ module.exports = {
          }
    },
   },
-},
   defaultNetwork: "rinkeby",
   networks: {
      hardhat: {},
