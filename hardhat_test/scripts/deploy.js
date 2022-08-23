@@ -29,13 +29,13 @@ async function main() {
 
   const transactionResponse_2 = await proofs.createOffer({"offerId": offerId, "deal_start_block": deal_start_block, "deal_length_in_blocks": deal_length_in_blocks, "proof_frequency_in_blocks": proof_frequency_in_blocks, "price": price, "collateral": collateral, "erc20_token_denomination": erc20_token_denomination, "ipfs_file_cid": ipfs_file_cid, "file_size": file_size, "blake3_checksum": blake3_checksum, "proof_blocks": proof_blocks});
   const transactionReceipt_2 = await transactionResponse_2.wait(); 
-  console.log(transactionReceipt_2)
+  //console.log(transactionReceipt_2)
 
   let txtFile = "bao_slice_2.txt";
   let proof = fs.readFileSync(txtFile);
   const transactionResponse = await proofs.save_proof(proof, 55378008);
   const transactionReceipt = await transactionResponse.wait()
-  console.log(transactionReceipt)
+  //console.log(transactionReceipt)
   console.log(transactionReceipt.events[0].args)
 }
 

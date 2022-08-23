@@ -15,7 +15,7 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
 
     constructor() ConfirmedOwner(msg.sender) {
         setChainlinkToken(0x326C977E6efc84E512bB9C30f76E30c160eD06FB);
-        setChainlinkOracle(0x9c86321B21AaB1246446b652817A160CDde9d996);
+        setChainlinkOracle(0xF1a252307Ff9F3fbB9598c9a181385122948b8Ae);
         fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
     }
 
