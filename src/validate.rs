@@ -1,22 +1,21 @@
 
-
 use rocket::serde::{/*Serialize, Deserialize,*/ json::{Json}};
 //use rocket::{response, Request};
 //use rocket::http::Status;
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address, U256, Bytes, PathOrString},
+             types::{Filter, H256, Address, U256},
              contract::{Contract},
              abi::{Abi}};
 //use eyre;
 use anyhow::anyhow;
-use std::{io::Read,
+use std::{io::{Read, Cursor},
           str::FromStr,
           fs};
 use byteorder::{BigEndian, ByteOrder};
 //use math;
-use cid::Cid;
+use cid;
 use multihash::Multihash;
-use stringreader::StringReader;
+use multibase::{decode};
 
 use crate::{types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token},
             ChainlinkRequest, MyResult, ResponseData};
@@ -33,7 +32,7 @@ fn is_valid(response: usize) -> bool {
 /*
     Gets the deal info from on chain.
 */
-pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Error> {
+pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>), crate::Error> {
     let deal_id: DealID = DealID(offer_id);
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
@@ -80,10 +79,14 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
     let cid_return: String = contract
         .method::<_, String>("getIpfsFileCid", deal_id.0)?
         .call()
-        .await?; 
-    let reader = StringReader::new(&cid_return);
-    let ipfs_file_cid: Cid = cid::CidGeneric::read_bytes(reader)?;
-    
+        .await?;
+
+    let code = "z".to_owned();
+    let full_cid = format!("{}{}", code, cid_return);
+    let (_, decoded) = decode(full_cid)?;
+    let reader = Cursor::new(decoded);
+    let ipfs_file_cid = cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
+
     let file_size: u64 = contract
         .method::<_, u64>("getFileSize", deal_id.0)?
         .call()
@@ -93,8 +96,12 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
         .method::<_, String>("getBlake3Checksum", deal_id.0)?
         .call()
         .await?;
-    
     let blake3_checksum = bao::Hash::from_str(&blake3_return)?;
+
+    let proof_blocks: Vec<U256> = contract
+        .method::<_, Vec<U256>>("getProofBlocks", deal_id.0)?
+        .call()
+        .await?;
 
     let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
@@ -106,33 +113,26 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, crate::Erro
         erc20_token_denomination: erc20_token_denomination, 
         ipfs_file_cid: ipfs_file_cid, 
         file_size: file_size, 
-        blake3_checksum: blake3_checksum
+        blake3_checksum: blake3_checksum,
     };
 
     println!("Deal info: {:?}", deal_info);
+    println!("Proof blocks: {:?}", proof_blocks);
 
-    Ok(deal_info)
+    Ok((deal_info, proof_blocks))
 
 }
 
 pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
     Json(MyResult {
         job_run_id: 0,
-        data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+        data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
         status: status,
         result: reason
     })
 }
 
 pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
-
-    let mut result = Json(MyResult{job_run_id: 0,
-                                                   data: ResponseData{ offer_id: 0,
-                                                                       success_count: 0,
-                                                                       num_windows: 0
-                                                   },
-                                                   status: 0,
-                                                   result: "".to_string()});
 
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
@@ -141,9 +141,9 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
     let offer_id = request.data.offer_id.trim().parse::<u64>().unwrap();
-    let deal_info: OnChainDealInfo = match get_deal_info(offer_id).await {
-        Ok(d) => d,
-        Err(e) => return construct_error(500, format!("{:?}", e))
+    let (deal_info, proof_blocks): (OnChainDealInfo, Vec<U256>) = match get_deal_info(offer_id).await {
+        Ok((d, pb)) => (d, pb),
+        Err(e) => return construct_error(500, format!("Error in get_deal_info: {:?}", e))
     };
 
     // checking that deal is either finished or cancelled
@@ -156,7 +156,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
     if !finished && !cancelled {
         return Json(MyResult {job_run_id: 0,
-                              data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+                              data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
                               status: 500,
                               result: format!("Deal {} is not finished or cancelled.", offer_id)});
     }
@@ -171,13 +171,12 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     
     let _num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
 
+    // FIGURE OUT WINDOW STUFF
 
-    // SKIP TO END
-
-
-    //let block_num = provider.get_block_number().await?;
-    //let block_num = input_data.data.block_num.trim().parse::<u64>().unwrap();
-    //let offer_id = input_data.data.offer_id.trim().parse::<u64>().unwrap();
+    for block in proof_blocks {
+        let filter = Filter::new().select(block.low_u64()).topic1(H256::from_low_u64_be(offer_id));
+    }
+    
     let filter = Filter::new().select(current_block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
     let block_logs = match provider.get_logs(&filter).await {
         Ok(l) => l,
@@ -217,7 +216,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     let response = decoder.read_to_end(&mut decoded).unwrap();
 
     Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
+                      data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
                       status: 200,
-                      result: "".to_string() })
+                      result: "Ok".to_string() })
 }

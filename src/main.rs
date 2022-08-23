@@ -77,7 +77,7 @@ pub struct RequestData {
 #[serde(crate = "rocket::serde")]
 pub struct ResponseData {
     pub offer_id: u64,
-    pub success_count: u8,
+    pub success_count: String,
     pub num_windows: u8
 }
 

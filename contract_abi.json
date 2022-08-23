@@ -85,7 +85,7 @@
     "name":"getIpfsFileCid",
     "outputs": [{
             "name":"",
-            "type":"uint256"
+            "type":"string"
     }],
     "stateMutability":"view"
 },
@@ -111,8 +111,21 @@
     "name":"getBlake3Checksum",
     "outputs": [{
             "name":"",
-            "type":"uint256"
+            "type":"string"
     }],
     "stateMutability":"view"
+},
+{
+        "type":"function",
+        "inputs": [{
+                "name":"_offerId",
+                "type":"uint256"
+        }],
+        "name":"getProofBlocks",
+        "outputs": [{
+                "name":"",
+                "type":"uint256[]"
+        }],
+        "stateMutability":"view"
 }
 ]
