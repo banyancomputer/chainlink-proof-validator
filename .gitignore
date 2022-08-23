@@ -4,6 +4,7 @@ node_modules
 
 node_modules
 .env
+Cargo.lock
 coverage
 coverage.json
 typechain
@@ -13,4 +14,4 @@ typechain-types
 cache
 artifacts
 
-Cargo.lock
+

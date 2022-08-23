@@ -133,6 +133,8 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
     let offer_id = request.data.offer_id.trim().parse::<u64>().unwrap();
+    let block_num = request.data.block_num.trim().parse::<u64>().unwrap();
+
     let deal_info: OnChainDealInfo = get_deal_info(offer_id).await?;
 
     // checking that deal is either finished or cancelled
@@ -157,10 +159,6 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Result<Json<My
 
     // SKIP TO END
 
-
-    let block_num = provider.get_block_number().await?;
-    //let block_num = input_data.data.block_num.trim().parse::<u64>().unwrap();
-    //let offer_id = input_data.data.offer_id.trim().parse::<u64>().unwrap();
     let filter = Filter::new().select(block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
     let block_logs = provider.get_logs(&filter).await?;
     //println!("Block logs: {:?}", block_logs);
