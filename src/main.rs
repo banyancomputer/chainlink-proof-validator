@@ -61,13 +61,15 @@ impl<'r> response::Responder<'r, 'static> for Error {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(crate = "rocket::serde")]
 pub struct ChainlinkRequest {
-    pub id: String,
+    pub job_run_id: String,
     pub data: RequestData
 }
 
+// This portion is not generalizable. 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(crate = "rocket::serde")]
 pub struct RequestData {
+    pub block_num: String,
     pub offer_id: String
 }
 

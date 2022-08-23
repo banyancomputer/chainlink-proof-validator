@@ -20,8 +20,9 @@ async function main() {
   let ipfs_file_cid = 8; 
   let file_size = 9; 
   let blake3_checksum = 10; 
+  let proof_blocks = [];
 
-  const transactionResponse_2 = await lock.createOffer(offerId, deal_start_block, deal_length_in_blocks, proof_frequency_in_blocks, price, collateral, erc20_token_denomination, ipfs_file_cid, file_size, blake3_checksum);
+  const transactionResponse_2 = await lock.createOffer(offerId, deal_start_block, deal_length_in_blocks, proof_frequency_in_blocks, price, collateral, erc20_token_denomination, ipfs_file_cid, file_size, blake3_checksum, proof_blocks);
   const transactionReceipt_2 = await transactionResponse_2.wait(); 
   console.log(transactionReceipt_2)
 }

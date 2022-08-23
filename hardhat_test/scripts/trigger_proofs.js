@@ -1,23 +1,26 @@
-// We require the Hardhat Runtime Environment explicitly here. This is optional
-// but useful for running the script in a standalone fashion through `node <script>`.
-//
-// You can also run a script with `npx hardhat run <script>`. If you do that, Hardhat
-// will compile your contracts, add the Hardhat Runtime Environment's members to the
-// global scope, and execute the script.
 const hre = require("hardhat");
 const fs = require('fs');
 
 async function main() {
 
-  const Proofs = await hre.ethers.getContractFactory("Proofs");
-  const proofs = await Proofs.deploy();
-  
-  await proofs.deployed();
-  console.log("Proofs deployed to:", proofs.address);
-  
+  const Proofs = await ethers.getContractFactory("Proofs");
+  const proofs = await Proofs.attach("0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532");
+  console.log(proofs.address);
+
+  const transactionResponse3 = await proofs.verification();
+  console.log("Verification Before:", transactionResponse3);
+
+  const transactionResponse = await proofs.requestVerification("99a3daf9f4a94b319a9c4b9a27d18662","7457561", "55378008");
+  const transactionReceipt = await transactionResponse.wait()
+  console.log(transactionReceipt);
+
+  const transactionResponse2 = await proofs.verification();
+  console.log("Verification After:", transactionResponse2);
+
+  /*
   let offerId = 55378008;
   let deal_start_block = 2; 
-  let deal_length_in_blocks = 3; 
+  let deal_length_in_blocks = 3;
   let proof_frequency_in_blocks = 4; 
   let price = 5; 
   let collateral = 6; 
@@ -37,6 +40,7 @@ async function main() {
   const transactionReceipt = await transactionResponse.wait()
   console.log(transactionReceipt)
   console.log(transactionReceipt.events[0].args)
+  */
 }
 
 // We recommend this pattern to be able to use async/await everywhere
