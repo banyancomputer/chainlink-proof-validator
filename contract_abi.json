@@ -127,5 +127,18 @@
                 "type":"uint256[]"
         }],
         "stateMutability":"view"
+},
+{
+        "type":"function",
+        "inputs": [{
+                "name":"_offerId",
+                "type":"uint256"
+        }],
+        "name":"getDeal",
+        "outputs": [{
+                "name":"",
+                "type":"bytes"
+        }],
+        "stateMutability":"view"
 }
 ]

@@ -1,43 +1,86 @@
+/*
+1. when it gets a request, find the deal_id’s info on chain
+2. check that the deal is either FINISHED (current_block_num > deal_start_block 
+   + deal_length_in_blocks) or CANCELLED (and do the computations below with 
+   deal_length_in_blocks := (agreed_upon_cancellation_block - deal_start).
+3. start iterating over proof_blocks  from window_num \in (0, num_windows), 
+   num_windows = ceiling(deal_length_in_blocks / window_size)
+        a. if there isn’t a proof recorded in proof_blocks under that window, continue
+        b. find the proof in that block’s logs, stick it in proof_bytes
+        c. if there is, set target_window_start to window_num * window_size + deal_start_block
+        d. get the target_block_hash as block_hash(target_window_start)
+        e. get the chunk_offset and chunk_size according to the function 
+           compute_random_block_choice_from_hash(target_block_hash, deal_info.file_length) 
+           defined in my code here: https://github.com/banyancomputer/ipfs-proof-buddy/blob/9f0ae728f7a103da615c5eedf37491267f470e48/src/proof_utils.rs#L17 
+           (by the way let’s not copy-paste or reimplement this- let’s make a banyan-shared  
+            crate when you get to this)
+        f. validate the proof, and if you pass, increment success_count
+4. then once you get done with iterating over all the proofs, return 
+   (success_count, num_windows)  and whatever id/deal_id you need in order 
+   to identify the computation performed back to chain
+*/
 
-use rocket::serde::{/*Serialize, Deserialize,*/ json::{Json}};
-//use rocket::{response, Request};
-//use rocket::http::Status;
+//cast send 0xabc123 "saveProof(uint256 offerId, bytes memory _proof)" 3 --rpc-url https://eth-mainnet.alchemyapi.io (--private-key=abc123)
+
+use rocket::serde::{Serialize, Deserialize, json::{Json}};
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address, U256},
+             types::{Filter, H256, Address, U256, Bytes},
              contract::{Contract},
              abi::{Abi}};
-//use eyre;
-use anyhow::anyhow;
+use anyhow;
 use std::{io::{Read, Cursor},
           str::FromStr,
           fs};
 use byteorder::{BigEndian, ByteOrder};
-//use math;
 use cid;
 use multihash::Multihash;
-use multibase::{decode};
+use multibase::decode;
 
-use crate::{types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token},
-            ChainlinkRequest, MyResult, ResponseData};
+use crate::types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token};
 
 pub(crate) const CHUNK_SIZE: usize = 1024;
 
-fn is_valid(response: usize) -> bool {
-    if response == 1024 {
-        return true;
-    }
-    return false;
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(crate = "rocket::serde")]
+pub struct ChainlinkRequest {
+    pub job_run_id: String,
+    pub data: RequestData
+}
+
+// This portion is not generalizable. 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(crate = "rocket::serde")]
+pub struct RequestData {
+    pub block_num: String,
+    pub offer_id: String
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(crate = "rocket::serde")]
+pub struct ResponseData {
+    pub offer_id: u64,
+    pub success_count: u64,
+    pub num_windows: u8
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(crate = "rocket::serde")]
+pub struct MyResult {
+    pub job_run_id: u64,
+    pub data: ResponseData,
+    pub status: u16,
+    pub result: String
 }
 
 /*
     Gets the deal info from on chain.
 */
-pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>), crate::Error> {
+pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>), anyhow::Error> {
     let deal_id: DealID = DealID(offer_id);
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532".parse::<Address>()?; //address of test contract
+    let address = "0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     
@@ -80,12 +123,12 @@ pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>)
         .method::<_, String>("getIpfsFileCid", deal_id.0)?
         .call()
         .await?;
-
     let code = "z".to_owned();
     let full_cid = format!("{}{}", code, cid_return);
     let (_, decoded) = decode(full_cid)?;
     let reader = Cursor::new(decoded);
     let ipfs_file_cid = cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
+    println!("cid: {ipfs_file_cid}");
 
     let file_size: u64 = contract
         .method::<_, u64>("getFileSize", deal_id.0)?
@@ -102,6 +145,13 @@ pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>)
         .method::<_, Vec<U256>>("getProofBlocks", deal_id.0)?
         .call()
         .await?;
+
+    /*let whole_thing: Bytes = contract
+        .method::<_, Bytes>("getDeal", deal_id.0)?
+        .call()
+        .await?;
+
+    println!("whole thing: {whole_thing}");*/
 
     let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
@@ -168,23 +218,39 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         true => agreed_upon_cancellation_block + deal_info.deal_start_block
     };
 
-    let window_size: u64 = 5; // need to figure out how to get this
-    
-    let _num_windows = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0);
+    let window_size: u64 = 3; // need to figure out how to get this, 3 is to work with our stupid value in the dummy contract
+    let num_windows: usize = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
-    // FIGURE OUT WINDOW STUFF
-
-    for block in proof_blocks {
-        let filter = Filter::new().select(block.low_u64()).topic1(H256::from_low_u64_be(offer_id));
+    for window_num in 0..num_windows {
+        let block: u64 = match proof_blocks.get(window_num) {
+            Some(b) => b.as_u64(),
+            None => continue
+        }; // will need to change this once proof_blocks is changed
+        println!("block: {block}");
+        let filter: Filter = 
+            Filter::new()
+            .select(block)
+            .topic1(H256::from_low_u64_be(offer_id));
+        let block_logs = match provider.get_logs(&filter).await {
+            Ok(l) => l,
+            Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
+        };
+        let proof_bytes = &block_logs[0].data;
+        let target_window_start: BlockNum = BlockNum(window_num as u64 * window_size + deal_info.deal_start_block.0);
+        let target_block_hash = match provider.get_block(block).await {
+            Ok(b) => b.unwrap().hash,
+            Err(e) => return construct_error(500, format!("Could not get block number {block}: {e}."))
+        };
+        //let (chunk_offset, chunk_size) = 
     }
     
     let filter = Filter::new().select(zev_do_not_change_this_unless_you_have_something_that_works).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
+    
+    //println!("Block logs: {:?}", block_logs);
     let block_logs = match provider.get_logs(&filter).await {
         Ok(l) => l,
         Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
     };
-    //println!("Block logs: {:?}", block_logs);
-
     let data = &block_logs[0].data;
     //println!("data: {}", data);
     let data_size = match data.get(56..64) {// .ok_or(crate::Error(anyhow!("can't get data from 56 to 64")))?; 
