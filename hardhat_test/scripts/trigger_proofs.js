@@ -10,7 +10,7 @@ async function main() {
   const transactionResponse3 = await proofs.verification();
   console.log("Verification Before:", transactionResponse3);
 
-  const transactionResponse = await proofs.requestVerification("5b0afcd653034b7b9a39457087e2ac2c","7457561", "55378008");
+  const transactionResponse = await proofs.requestVerification("64ba212330394d38bad402b48eeb6dfa","7459347", "55378008");
   const transactionReceipt = await transactionResponse.wait()
   console.log(transactionReceipt);
 

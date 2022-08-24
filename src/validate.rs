@@ -126,7 +126,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>)
 pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
     Json(MyResult {
         job_run_id: 0,
-        data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
+        data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
         status: status,
         result: reason
     })
@@ -140,6 +140,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
+    let zev_do_not_change_this_unless_you_have_something_that_works = request.data.block_num.trim().parse::<u64>().unwrap();
     let offer_id = request.data.offer_id.trim().parse::<u64>().unwrap();
     let (deal_info, proof_blocks): (OnChainDealInfo, Vec<U256>) = match get_deal_info(offer_id).await {
         Ok((d, pb)) => (d, pb),
@@ -156,7 +157,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
     if !finished && !cancelled {
         return Json(MyResult {job_run_id: 0,
-                              data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
+                              data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
                               status: 500,
                               result: format!("Deal {} is not finished or cancelled.", offer_id)});
     }
@@ -177,7 +178,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         let filter = Filter::new().select(block.low_u64()).topic1(H256::from_low_u64_be(offer_id));
     }
     
-    let filter = Filter::new().select(current_block_num).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
+    let filter = Filter::new().select(zev_do_not_change_this_unless_you_have_something_that_works).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
     let block_logs = match provider.get_logs(&filter).await {
         Ok(l) => l,
         Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
@@ -214,9 +215,9 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         CHUNK_SIZE.try_into().unwrap(),
     );
     let response = decoder.read_to_end(&mut decoded).unwrap();
-
+    println!("response: {:?}", response);
     Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: "0".to_string(), num_windows: 0 },
+                      data: ResponseData { offer_id: 0, success_count: 100, num_windows: 0 },
                       status: 200,
                       result: "Ok".to_string() })
 }

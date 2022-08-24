@@ -1,0 +1,36 @@
+type = "directrequest"
+schemaVersion = 1
+name = "validate_full_stack_operator_"
+externalJobID = "38f6bb33-375f-4f01-b0ae-9d75c73da23d"
+maxTaskDuration = "0s"
+contractAddress = "0xF1a252307Ff9F3fbB9598c9a181385122948b8Ae"
+evmChainID = "5"
+minContractPaymentLinkJuels = "0"
+observationSource = """
+    decode_log  [type=ethabidecodelog
+                abi="OracleRequest(bytes32 indexed specId, address requester, bytes32 requestId, uint256 payment, address callbackAddr, bytes4 callbackFunctionId, uint256 cancelExpiration, uint256 dataVersion, bytes data)"
+                data="$(jobRun.logData)"
+                topics="$(jobRun.logTopics)"]
+
+    decode_cbor [type=cborparse data="$(decode_log.data)"]
+
+    ds          [type="http"
+                method=POST
+                url="https://399d-195-250-172-101.eu.ngrok.io/val"
+                requestData="{\\"job_run_id\\": $(jobSpec.externalJobID), \\"data\\": {\\"block_num\\": $(decode_cbor.block_num), \\"offer_id\\": $(decode_cbor.offer_id)}}"
+                allowUnrestrictedNetworkAccess=true
+                ]
+
+    parse       [type=jsonparse path="data,success_count" data="$(ds)"]
+
+    encode_data [type="ethabiencode" abi="(bytes32 requestId, uint256 _verification)" data="{ \\"requestId\\": $(decode_log.requestId), \\"_verification\\": $(parse) }"]
+
+    encode_tx   [type="ethabiencode"
+                abi="fulfillOracleRequest2(bytes32 requestId, uint256 payment, address callbackAddress, bytes4 callbackFunctionId, uint256 expiration, bytes calldata data)"
+                data="{\\"requestId\\": $(decode_log.requestId), \\"payment\\":   $(decode_log.payment), \\"callbackAddress\\": $(decode_log.callbackAddr), \\"callbackFunctionId\\": $(decode_log.callbackFunctionId), \\"expiration\\": $(decode_log.cancelExpiration), \\"data\\": $(encode_data)}"
+                ]
+
+    submit_tx   [type="ethtx" to="0xF1a252307Ff9F3fbB9598c9a181385122948b8Ae" data="$(encode_tx)"]
+
+    decode_log -> decode_cbor -> ds -> parse -> encode_data -> encode_tx -> submit_tx
+"""
