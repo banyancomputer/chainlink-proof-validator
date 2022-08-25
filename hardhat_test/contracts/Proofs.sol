@@ -6,12 +6,7 @@ import '@chainlink/contracts/src/v0.8/ConfirmedOwner.sol';
 
 contract Proofs is ChainlinkClient, ConfirmedOwner {
     using Chainlink for Chainlink.Request;
-
-    uint256 public verification;
     uint256 private fee;
-
-    event RequestVerification(bytes32 indexed requestId, uint256 verification);
-    event ProofAdded(uint256 indexed offerId, uint256 indexed blockNumber, bytes proof);
 
     constructor() ConfirmedOwner(msg.sender) {
         setChainlinkToken(0x326C977E6efc84E512bB9C30f76E30c160eD06FB);
@@ -20,10 +15,7 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
     }
 
     uint256 private offerId;
-    mapping(uint256 => onChainDealInfo) internal deals;
-
-
-    struct onChainDealInfo {
+    struct Deal {
         uint256 offerId;
         uint256 deal_start_block;
         uint256 deal_length_in_blocks;
@@ -36,12 +28,27 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         string blake3_checksum;
         uint256[] proof_blocks;
     }
+    mapping(uint256 => Deal) public deals;
 
-    function createOffer (onChainDealInfo calldata deal)
-        public {
-            deals[deal.offerId] = deal;
-        }
-        
+    struct ResponseData {
+        uint256 offer_id;
+        uint256 success_count;
+        uint256 num_windows;
+        uint256 status;
+        string result;
+    }
+    mapping(uint256 => ResponseData) public responses;
+
+    event RequestVerification(bytes32 indexed requestId, uint256 offerId);
+    event ProofAdded(uint256 indexed offerId, uint256 indexed blockNumber, bytes proof);
+
+    function createOffer (Deal calldata _deal) public {
+            deals[_deal.offerId] = _deal;
+    }
+
+    function getDeal(uint256 _offerId) public view returns (Deal memory) {
+        return deals[_offerId];
+    }
     function getDealStartBlock(uint256 _offerId) public view returns (uint256) {
         return deals[_offerId].deal_start_block;
     }
@@ -91,9 +98,9 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
     /**
      * Receive the response in the form of uint256
      */
-    function fulfill(bytes32 _requestId, uint256 _verification) public recordChainlinkFulfillment(_requestId) {
-        emit RequestVerification(_requestId, _verification);
-        verification = _verification;
+    function fulfill(bytes32 requestId, uint256 _offer_id, uint256 _success_count, uint256 _num_windows, uint16 _status, string calldata _result) public recordChainlinkFulfillment(requestId) {
+        emit RequestVerification(requestId, _offer_id);
+        responses[_offer_id] = ResponseData(_offer_id, _success_count, _num_windows, _status, _result);
     }
 
     /**

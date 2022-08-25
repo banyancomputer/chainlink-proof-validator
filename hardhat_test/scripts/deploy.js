@@ -36,7 +36,26 @@ async function main() {
   const transactionResponse = await proofs.save_proof(proof, 55378008);
   const transactionReceipt = await transactionResponse.wait()
   //console.log(transactionReceipt)
-  console.log(transactionReceipt.events[0].args)
+  //console.log(transactionReceipt.events[0].args.blockNumber)
+
+  await new Promise(r => setTimeout(r, 120000));
+
+  const transactionResponse3 = await proofs.save_proof(proof, 55378008);
+  const transactionReceipt3 = await transactionResponse3.wait()
+  //console.log(transactionReceipt3.events[0].args.blockNumber)
+
+  /*
+  const transactionResponse5 = await proofs.getProofBlocks(55378008);
+  console.log(transactionResponse5)
+
+  const transactionResponse4 = await proofs.getDeal(55378008);
+  console.log("Struct Getter:", transactionResponse4);
+
+  
+  const transactionResponse6 = await proofs.deals(55378008);
+  console.log("Auto Getter:", transactionResponse6);
+  */
+
 }
 
 // We recommend this pattern to be able to use async/await everywhere
