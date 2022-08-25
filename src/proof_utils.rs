@@ -42,7 +42,7 @@ pub async fn gen_obao<R: Read>(mut reader: R) -> Result<(bao::Hash, File)> {
     Ok((hash, encoder.into_inner()))
 }
 */
-pub async fn gen_proof<R: Read + Seek>(
+/*pub async fn gen_proof<R: Read + Seek>(
     block_number: BlockNum,
     block_hash: H256,
     file_handle: R,
@@ -59,4 +59,4 @@ pub async fn gen_proof<R: Read + Seek>(
         block_number,
         bao_proof_data,
     })
-}
+}*/

@@ -80,7 +80,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
+    let address = "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800 0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     
@@ -180,7 +180,7 @@ pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Er
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
+    let address = "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     let block: u64 = contract
@@ -239,6 +239,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     let num_windows: usize = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
     for window_num in 0..num_windows {
+        println!("iteration: {window_num}");
         let block: u64 = match get_block(offer_id, window_num as u64).await {
             Ok(b) => b,
             Err(e) => return construct_error(500, format!("Could not get block: {e}"))
