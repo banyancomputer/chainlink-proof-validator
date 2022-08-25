@@ -1,5 +1,5 @@
 [package]
-name = "hello-rust"
+name = "rust_chainlink_ea_api"
 version = "0.1.0"
 edition = "2021"
 
@@ -27,3 +27,4 @@ libmath = "0.2.1"
 multihash = "0.16.3"
 multibase = "0.9.1"
 stringreader = "0.1.1"
+ipfs_proof_buddy = { git = "https://github.com/banyancomputer/ipfs-proof-buddy.git" }

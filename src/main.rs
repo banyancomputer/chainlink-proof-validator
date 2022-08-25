@@ -7,6 +7,7 @@ extern crate serde_json;
 
 mod types;
 mod validate;
+mod proof_utils;
 
 use rocket::serde::json::Json;
 use eyre::Result;
