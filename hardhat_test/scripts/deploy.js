@@ -25,37 +25,30 @@ async function main() {
   let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE"; 
   let file_size = 9; 
   let blake3_checksum = "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f"; 
-  let proof_blocks = []
+  let proof_blocks = {}
 
-  const transactionResponse_2 = await proofs.createOffer({"offerId": offerId, "deal_start_block": deal_start_block, "deal_length_in_blocks": deal_length_in_blocks, "proof_frequency_in_blocks": proof_frequency_in_blocks, "price": price, "collateral": collateral, "erc20_token_denomination": erc20_token_denomination, "ipfs_file_cid": ipfs_file_cid, "file_size": file_size, "blake3_checksum": blake3_checksum, "proof_blocks": proof_blocks});
+  const transactionResponse_2 = await proofs.createOffer({"offerId": offerId, "deal_start_block": deal_start_block, "deal_length_in_blocks": deal_length_in_blocks, "proof_frequency_in_blocks": proof_frequency_in_blocks, "price": price, "collateral": collateral, "erc20_token_denomination": erc20_token_denomination, "ipfs_file_cid": ipfs_file_cid, "file_size": file_size, "blake3_checksum": blake3_checksum});
   const transactionReceipt_2 = await transactionResponse_2.wait(); 
   //console.log(transactionReceipt_2)
 
   let txtFile = "bao_slice_2.txt";
   let proof = fs.readFileSync(txtFile);
-  const transactionResponse = await proofs.save_proof(proof, 55378008);
+  const transactionResponse = await proofs.save_proof(proof, 55378008, 0);
   const transactionReceipt = await transactionResponse.wait()
   //console.log(transactionReceipt)
   //console.log(transactionReceipt.events[0].args.blockNumber)
 
   await new Promise(r => setTimeout(r, 120000));
 
-  const transactionResponse3 = await proofs.save_proof(proof, 55378008);
+  const transactionResponse3 = await proofs.save_proof(proof, 55378008, 5);
   const transactionReceipt3 = await transactionResponse3.wait()
   //console.log(transactionReceipt3.events[0].args.blockNumber)
 
-  /*
-  const transactionResponse5 = await proofs.getProofBlocks(55378008);
+  const transactionResponse5 = await proofs.getProofBlock(55378008, 0);
   console.log(transactionResponse5)
 
-  const transactionResponse4 = await proofs.getDeal(55378008);
-  console.log("Struct Getter:", transactionResponse4);
-
-  
-  const transactionResponse6 = await proofs.deals(55378008);
-  console.log("Auto Getter:", transactionResponse6);
-  */
-
+  const transactionResponse6 = await proofs.getProofBlock(55378008, 5);
+  console.log(transactionResponse6)
 }
 
 // We recommend this pattern to be able to use async/await everywhere

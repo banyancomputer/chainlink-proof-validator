@@ -26,9 +26,9 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         string ipfs_file_cid; 
         uint256 file_size;
         string blake3_checksum;
-        uint256[] proof_blocks;
     }
     mapping(uint256 => Deal) public deals;
+    mapping (uint256 => mapping (uint256 => uint256)) public proofblocks;
 
     struct ResponseData {
         uint256 offer_id;
@@ -43,7 +43,7 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
     event ProofAdded(uint256 indexed offerId, uint256 indexed blockNumber, bytes proof);
 
     function createOffer (Deal calldata _deal) public {
-            deals[_deal.offerId] = _deal;
+        deals[_deal.offerId] = _deal;
     }
 
     function getDeal(uint256 _offerId) public view returns (Deal memory) {
@@ -76,13 +76,13 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
     function getBlake3Checksum(uint256 _offerId) public view returns (string memory) {
         return deals[_offerId].blake3_checksum;
     }
-    function getProofBlocks(uint256 _offerId) public view returns (uint256[] memory) {
-        return deals[_offerId].proof_blocks;
+    function getProofBlock(uint256 _offerId, uint256 window_num) public view returns (uint256) {
+        return proofblocks[_offerId][window_num]; 
     }
 
     // ISSUE OF block.number in proofs not being the same as the block number the event is emitted to?
-    function save_proof (bytes calldata _proof, uint256 _offerId) public {
-        deals[_offerId].proof_blocks.push(block.number);
+    function save_proof (bytes calldata _proof, uint256 _offerId, uint256 target_window) public {
+        proofblocks[_offerId][target_window] = block.number;
         emit ProofAdded(_offerId, block.number, _proof);
     }
 
