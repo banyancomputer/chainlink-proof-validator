@@ -120,6 +120,9 @@
         "inputs": [{
                 "name":"_offerId",
                 "type":"uint256"
+        }, {
+                "name":"window_num",
+                "type":"uint256"
         }],
         "name":"getProofBlocks",
         "outputs": [{
