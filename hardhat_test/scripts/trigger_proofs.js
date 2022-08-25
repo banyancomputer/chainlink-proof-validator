@@ -4,18 +4,18 @@ const fs = require('fs');
 async function main() {
 
   const Proofs = await ethers.getContractFactory("Proofs");
-  const proofs = await Proofs.attach("0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5");
+  const proofs = await Proofs.attach("0x9ee596734485268eF62db4f3E61d891E221504f6");
   console.log(proofs.address);
 
   const transactionResponse3 = await proofs.responses(55378008);
   console.log("Verification Before:", transactionResponse3);
 
-  const transactionResponse = await proofs.requestVerification("d2aab9b59c924e959ac417c6e38ea278","7463632", "55378008");
+  const transactionResponse = await proofs.requestVerification("49f9283dfce34ca1b60b59d0291e82a8","7463632", "55378008");
   const transactionReceipt = await transactionResponse.wait()
   console.log(transactionReceipt);
 
   // wait 30 seconds
-  await new Promise(r => setTimeout(r, 100000));
+  await new Promise(r => setTimeout(r, 70000));
   // need to be checking for an event here since the reciept comes way before the chainlink settles up 
   const transactionResponse2 = await proofs.responses(55378008);
   console.log("Verification After:", transactionResponse2);
