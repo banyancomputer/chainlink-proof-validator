@@ -60,16 +60,15 @@ pub struct RequestData {
 pub struct ResponseData {
     pub offer_id: u64,
     pub success_count: u64,
-    pub num_windows: u8
+    pub num_windows: u64,
+    pub status: u16,
+    pub result: String
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "rocket::serde")]
 pub struct MyResult {
-    pub job_run_id: u64,
     pub data: ResponseData,
-    pub status: u16,
-    pub result: String
 }
 
 /*
@@ -174,12 +173,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>)
 }
 
 pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
-    Json(MyResult {
-        job_run_id: 0,
-        data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
-        status: status,
-        result: reason
-    })
+    Json(MyResult{data: ResponseData{ offer_id: 0, success_count: 0, num_windows: 0, status: status, result: reason}})
 }
 
 pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
@@ -206,10 +200,8 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     let cancelled = false; // need to figure out how to get this
 
     if !finished && !cancelled {
-        return Json(MyResult {job_run_id: 0,
-                              data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0 },
-                              status: 500,
-                              result: format!("Deal {} is not finished or cancelled.", offer_id)});
+        return Json(MyResult {data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0, status: 500,
+            result: format!("Deal {} is not finished or cancelled.", offer_id)}});
     }
 
     let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
@@ -282,8 +274,6 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     );
     let response = decoder.read_to_end(&mut decoded).unwrap();
     println!("response: {:?}", response);
-    Json(MyResult {job_run_id: 0,
-                      data: ResponseData { offer_id: 0, success_count: 100, num_windows: 0 },
-                      status: 200,
-                      result: "Ok".to_string() })
+    Json(MyResult {data: ResponseData { offer_id: offer_id, success_count: 100, num_windows: 20000, status: 200,
+        result: "Ok".to_string()}})
 }
