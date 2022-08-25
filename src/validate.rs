@@ -79,7 +79,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<(OnChainDealInfo, Vec<U256>)
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
     ).expect("could not instantiate HTTP Provider");
-    let address = "0x24A95cffE14A9C3a0CfC2D7BcB0E059757A7f532".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
+    let address = "0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
     let contract = Contract::new(address, abi, provider);
     
