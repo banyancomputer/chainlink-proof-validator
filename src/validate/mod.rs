@@ -20,43 +20,35 @@
    to identify the computation performed back to chain
 */
 
-//cast send 0xabc123 "saveProof(uint256 offerId, bytes memory _proof)" 3 --rpc-url https://eth-mainnet.alchemyapi.io (--private-key=abc123)
-
 use rocket::serde::{Serialize, Deserialize, json::{Json}};
 use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address, U256, Bytes},
+             types::{Filter, H256, Address, U256},
              contract::{Contract},
              abi::{Abi}};
 use anyhow;
 use std::{io::{Read, Cursor},
           str::FromStr,
           fs};
-use byteorder::{BigEndian, ByteOrder};
 use cid;
 use multihash::Multihash;
 use multibase::decode;
 use crate::types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token};
 use crate::proof_utils;
 
-//use crate::types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token};
-
-pub(crate) const CHUNK_SIZE: usize = 1024;
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
 pub struct ChainlinkRequest {
     pub job_run_id: String,
     pub data: RequestData
 }
 
-// This portion is not generalizable. 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
 pub struct RequestData {
     pub offer_id: String
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "rocket::serde")]
 pub struct ResponseData {
     pub offer_id: u64,
@@ -66,7 +58,7 @@ pub struct ResponseData {
     pub result: String
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "rocket::serde")]
 pub struct MyResult {
     pub data: ResponseData,
@@ -78,11 +70,16 @@ pub struct MyResult {
 pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Error> {
     let deal_id: DealID = DealID(offer_id);
     let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-    ).expect("could not instantiate HTTP Provider");
-    let address = "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800 0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5
-    let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
-    let contract = Contract::new(address, abi, provider);
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+        .expect("could not instantiate HTTP Provider");
+    let address = 
+        "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
+    let abi: Abi = 
+        serde_json::from_str(fs::read_to_string("contract_abi.json")
+                                .expect("can't read file")
+                                .as_str())?;
+    let contract = 
+        Contract::new(address, abi, provider);
     
     let deal_start_block: BlockNum = BlockNum(contract
         .method::<_, U256>("getDealStartBlock", deal_id.0)?
@@ -127,8 +124,8 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
     let full_cid = format!("{}{}", code, cid_return);
     let (_, decoded) = decode(full_cid)?;
     let reader = Cursor::new(decoded);
-    let ipfs_file_cid = cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
-    println!("cid: {ipfs_file_cid}");
+    let ipfs_file_cid = 
+        cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
 
     let file_size: u64 = contract
         .method::<_, u64>("getFileSize", deal_id.0)?
@@ -140,18 +137,6 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
         .call()
         .await?;
     let blake3_checksum = bao::Hash::from_str(&blake3_return)?;
-
-    /*let proof_blocks: Vec<U256> = contract
-        .method::<_, Vec<U256>>("getProofBlocks", deal_id.0)?
-        .call()
-        .await?;*/
-
-    /*let whole_thing: Bytes = contract
-        .method::<_, Bytes>("getDeal", deal_id.0)?
-        .call()
-        .await?;
-
-    println!("whole thing: {whole_thing}");*/
 
     let deal_info: OnChainDealInfo = OnChainDealInfo { 
         deal_id: deal_id, 
@@ -166,22 +151,27 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
         blake3_checksum: blake3_checksum,
     };
 
-    println!("Deal info: {:?}", deal_info);
-
     Ok(deal_info)
 
 }
 
 pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
-    Json(MyResult{data: ResponseData{ offer_id: 0, success_count: 0, num_windows: 0, status: status, result: reason}})
+    Json(MyResult{data: ResponseData{ offer_id: 0, 
+                                      success_count: 0, 
+                                      num_windows: 0, 
+                                      status: status, 
+                                      result: reason}})
 }
 
 pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Error> {
     let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-    ).expect("could not instantiate HTTP Provider");
-    let address = "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
-    let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str())?;
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+        .expect("could not instantiate HTTP Provider");
+    let address = 
+        "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
+    let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json")
+                                            .expect("can't read file")
+                                            .as_str())?;
     let contract = Contract::new(address, abi, provider);
     let block: u64 = contract
         .method::<_, U256>("getProofBlock", [offer_id, window_num])?
@@ -195,21 +185,21 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     let mut success_count = 0;
 
     let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" //"https://rinkeby.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe" // "https://mainnet.infura.io/v3/c60b0bb42f8a4c6481ecd229eddaca27"
-    ).expect("could not instantiate HTTP Provider");
+        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+        .expect("could not instantiate HTTP Provider");
     let _address = match "0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5".parse::<Address>() {
         Ok(a) => a,
-        Err(e) => return construct_error(500, format!("Could not parse contract address: {e}"))
-    }; //0xA2463e09E3D6dC860ac21490e532e2ea4BaBC800
+        Err(e) => 
+            return construct_error(500,
+                                   format!("Could not parse contract address: {e}"))
+    };
     let _abi: Abi = match serde_json::from_str(fs::read_to_string("contract_abi.json").expect("can't read file").as_str()) {
         Ok(a) => a,
         Err(e) => return construct_error(500, format!("Could not get contract abi: {e}"))
     };
-    //let contract = Contract::new(address, abi, provider);
 
     // getting deal info from on chain
     let request: ChainlinkRequest = input_data.into_inner();
-    //let zev_do_not_change_this_unless_you_have_something_that_works = request.data.block_num.trim().parse::<u64>().unwrap();
     let offer_id = request.data.offer_id.trim().parse::<u64>().unwrap();
     let deal_info: OnChainDealInfo = match get_deal_info(offer_id).await {
         Ok(d) => d,
@@ -225,8 +215,13 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
     let cancelled = false; // need to figure out how to get this
 
     if !finished && !cancelled {
-        return Json(MyResult {data: ResponseData { offer_id: 0, success_count: 0, num_windows: 0, status: 500,
-            result: format!("Deal {} is not finished or cancelled.", offer_id)}});
+        return Json(MyResult { 
+                        data: ResponseData { 
+                            offer_id: 0, 
+                            success_count: 0, 
+                            num_windows: 0, 
+                            status: 500,
+                            result: format!("Deal {} is ongoing.", offer_id)}});
     }
 
     let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
@@ -235,11 +230,13 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         true => agreed_upon_cancellation_block + deal_info.deal_start_block
     };
     let window_size = deal_info.proof_frequency_in_blocks.0;
-    //let window_size: u64 = 3; // need to figure out how to get this, 3 is to work with our stupid value in the dummy contract
-    let num_windows: usize = math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
+    let num_windows: usize = 
+        math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
+    // iterating over proof blocks (by window)
     for window_num in 0..num_windows {
-        println!("iteration: {window_num}");
+
+        // step b. above
         let block: u64 = match get_block(offer_id, window_num as u64).await {
             Ok(b) => b,
             Err(e) => return construct_error(500, format!("Could not get block: {e}"))
@@ -253,14 +250,22 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
             Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
         };
         let proof_bytes = Cursor::new(&block_logs[0].data);
-        let target_window_start: BlockNum = BlockNum(window_num as u64 * window_size + deal_info.deal_start_block.0);
+
+        // step c. above
+        let target_window_start: BlockNum = 
+            BlockNum(window_num as u64 * window_size + deal_info.deal_start_block.0);
+        
+        // step d. above
         let target_block_hash = match provider.get_block(target_window_start.0).await {
             Ok(b) => b.unwrap().hash.unwrap(),
             Err(e) => return construct_error(500, format!("Could not get block number {block}: {e}."))
         };
 
-        let (chunk_offset, chunk_size) = proof_utils::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
+        // step e. above
+        let (chunk_offset, chunk_size) = 
+            proof_utils::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
         
+        // step f. above
         let mut decoded = Vec::new();
         let mut decoder = 
             bao::decode::SliceDecoder::new(proof_bytes, 
@@ -269,46 +274,15 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
                                         chunk_size);
 
         match decoder.read_to_end(&mut decoded) {
-            Ok(res) => success_count += 1,
+            Ok(_res) => success_count += 1,
             Err(e) => return construct_error(500, format!("Could not read proof: {e}"))
         };
     }
     
-    /*let filter = Filter::new().select(zev_do_not_change_this_unless_you_have_something_that_works).topic1(H256::from_low_u64_be(offer_id))/*.address("0xf679d8d8a90f66b4d8d9bf4f2697d53279f42bea".parse::<Address>().unwrap())*/;
-    
-    let block_logs = match provider.get_logs(&filter).await {
-        Ok(l) => l,
-        Err(e) => return construct_error(500, format!("Couldn't get logs from block {}: {:?}", current_block_num, e))
-    };
-    let data = &block_logs[0].data;
-    let data_size = match data.get(56..64) {// .ok_or(crate::Error(anyhow!("can't get data from 56 to 64")))?; 
-        Some(size) => size,
-        None => return construct_error(500, "Couldn't get size of proof data from bytes 56-64 in log".to_string())
-    };
-    let actual_size = BigEndian::read_u64(data_size);
-    //let size: usize = usize::from(data_size);
-    // Ok I need the hex value of datasize so I can get rid of the hardcoded length of the 
-    // bao file below. data size is an &[u8], and you cant just get the value at 64 data.get(64)
-    // since that is returning only one byte, but the size is denominated over several bytes. 
-
-    let end: usize = (64 + actual_size) as usize;
-    let data_bytes = match data.get(64..end) {//.ok_or(crate::Error(anyhow!("can't get data from {} to {}", 64, end)))?;
-        Some(bytes) => bytes,
-        None => return construct_error(500, format!("Couldn't get proof data from log. Problem reading bytes 64-{}", end))
-    };
-    let hash: bao::Hash = bao::Hash::from_str("c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f").unwrap();
-    let start_index = 532480;
-
-    let mut decoded = Vec::new();
-    let mut decoder = bao::decode::SliceDecoder::new(
-        data_bytes,
-        &hash,
-        start_index.try_into().unwrap(),
-        CHUNK_SIZE.try_into().unwrap(),
-    );
-    let response = decoder.read_to_end(&mut decoded).unwrap();
-    println!("response: {:?}", response);*/
-    Json(MyResult {data: ResponseData { offer_id: offer_id, success_count: success_count, num_windows: 20000, status: 200,
-        result: "Ok".to_string()}})
+    Json(MyResult {data: ResponseData { offer_id: offer_id, 
+                                        success_count: success_count, 
+                                        num_windows: num_windows as u64, 
+                                        status: 200,
+                                        result: "Ok".to_string()}})
     
 }
