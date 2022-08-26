@@ -1,11 +1,13 @@
 const hre = require("hardhat");
 const fs = require('fs');
+require("dotenv").config()
+
 
 describe("Proof Verifier", function() {
   var contract;
   var proofs = [];
   var deal_start_block = 0; 
-  var deal_length_in_blocks = 10; 
+  var deal_length_in_blocks = 15; 
   var proof_frequency_in_blocks = 5; 
   var price = 0; 
   var collateral = 0; 
@@ -57,8 +59,9 @@ describe("Proof Verifier", function() {
 
   it("contains spec with an expectation", function() {
     console.log("zero", offerId)
+
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", yourUrl, true);
+    xhr.open("POST", "http://127.0.0.1:8000/val" ,  true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.send(JSON.stringify({
       job_run_id: "49f9283dfce34ca1b60b59d0291e82a8", 

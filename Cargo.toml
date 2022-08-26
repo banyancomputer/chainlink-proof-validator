@@ -28,3 +28,4 @@ multihash = "0.16.3"
 multibase = "0.9.1"
 stringreader = "0.1.1"
 ipfs_proof_buddy = { git = "https://github.com/banyancomputer/ipfs-proof-buddy.git" }
+ctor = "0.1.23"
