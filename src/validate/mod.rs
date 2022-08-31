@@ -20,7 +20,7 @@
    to identify the computation performed back to chain
 */
 
-use rocket::serde::{Serialize, Deserialize, json::{Json}};
+use rocket::serde::{Serialize, Deserialize, json::Json};
 use ethers::{providers::{Middleware, Provider, Http},
              types::{Filter, H256, Address, U256},
              contract::{Contract},
@@ -32,8 +32,8 @@ use std::{io::{Read, Cursor},
 use cid;
 use multihash::Multihash;
 use multibase::decode;
-use crate::types::{OnChainDealInfo, DealID, BlockNum, TokenAmount, Token};
-use crate::proof_utils;
+
+use banyan_shared::{types::*, proofs};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
@@ -50,7 +50,7 @@ pub struct RequestData {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "rocket::serde")]
-pub struct ResponseData {
+pub struct ResponseData { // maybe change so status and result are in the MyResult struct instead
     pub offer_id: u64,
     pub success_count: u64,
     pub num_windows: u64,
@@ -263,7 +263,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
         // step e. above
         let (chunk_offset, chunk_size) = 
-            proof_utils::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
+            proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
         
         // step f. above
         let mut decoded = Vec::new();
