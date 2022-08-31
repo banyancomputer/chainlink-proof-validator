@@ -14,6 +14,7 @@ async function main() {
   
   await proofs.deployed();
   console.log("Proofs deployed to:", proofs.address);
+  /*
   
   let offerId = 55378008;
   let deal_start_block = 2; 
@@ -49,6 +50,7 @@ async function main() {
 
   const transactionResponse6 = await proofs.getProofBlock(55378008, 5);
   console.log(transactionResponse6)
+*/
 }
 
 // We recommend this pattern to be able to use async/await everywhere

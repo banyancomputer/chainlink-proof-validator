@@ -16,4 +16,7 @@ npx hardhat run scripts/deploy.js --network goerli
 if you only want to call functions and not redeploy
 npx hardhat run scripts/trigger_proofs.js --network goerli  
 
+Integration testing for API: 
+npx hardhat test --network goerli
+
 ```

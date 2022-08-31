@@ -143,5 +143,70 @@
                 "type":"bytes"
         }],
         "stateMutability":"view"
-}
+},
+{
+        "inputs": [
+          {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "offerId",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "deal_start_block",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "deal_length_in_blocks",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "proof_frequency_in_blocks",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "price",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "collateral",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "erc20_token_denomination",
+                "type": "address"
+              },
+              {
+                "internalType": "string",
+                "name": "ipfs_file_cid",
+                "type": "string"
+              },
+              {
+                "internalType": "uint256",
+                "name": "file_size",
+                "type": "uint256"
+              },
+              {
+                "internalType": "string",
+                "name": "blake3_checksum",
+                "type": "string"
+              }
+            ],
+            "internalType": "struct Proofs.Deal",
+            "name": "_deal",
+            "type": "tuple"
+          }
+        ],
+        "name": "createOffer",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      }
 ]
