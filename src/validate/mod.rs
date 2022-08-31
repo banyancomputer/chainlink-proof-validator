@@ -34,6 +34,8 @@ use multihash::Multihash;
 use multibase::decode;
 
 use banyan_shared::{types::*, proofs};
+use dotenv::dotenv;
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
@@ -69,8 +71,8 @@ pub struct MyResult {
 */
 pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Error> {
     let deal_id: DealID = DealID(offer_id);
-    let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let provider = Provider::<Http>::try_from(api_token.as_str())
         .expect("could not instantiate HTTP Provider");
     let address = 
         "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
@@ -80,6 +82,7 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
                                 .as_str())?;
     let contract = 
         Contract::new(address, abi, provider);
+
     
     let deal_start_block: BlockNum = BlockNum(contract
         .method::<_, U256>("getDealStartBlock", deal_id.0)?
@@ -164,30 +167,36 @@ pub fn construct_error(status: u16, reason: String) -> Json<MyResult> {
 }
 
 pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Error> {
-    let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
-        .expect("could not instantiate HTTP Provider");
+
+    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let provider = Provider::<Http>::try_from(api_token)
+            .expect("could not instantiate HTTP Provider");
     let address = 
         "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json")
                                             .expect("can't read file")
                                             .as_str())?;
+    println!("offer_id: {}", offer_id);
+    println!("window_num: {}", window_num);
+
     let contract = Contract::new(address, abi, provider);
     let block: u64 = contract
         .method::<_, U256>("getProofBlock", [offer_id, window_num])?
         .call()
         .await?.as_u64();
+
     return Ok(block);
 }
 
 pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
 
+    dotenv().ok();
+    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
     let mut success_count = 0;
 
-    let provider = Provider::<Http>::try_from(
-        "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+    let provider = Provider::<Http>::try_from(api_token)
         .expect("could not instantiate HTTP Provider");
-    let _address = match "0xE5184a571d598D0530dFb2D33e6A4eeD6213D2C5".parse::<Address>() {
+    let _address = match "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>() {
         Ok(a) => a,
         Err(e) => 
             return construct_error(500,
@@ -205,6 +214,8 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         Ok(d) => d,
         Err(e) => return construct_error(500, format!("Error in get_deal_info: {:?}", e))
     };
+
+    println!("deal info: {:?}", deal_info);
 
     // checking that deal is either finished or cancelled
     let current_block_num = match provider.get_block_number().await {
@@ -234,6 +245,7 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
     // iterating over proof blocks (by window)
+
     for window_num in 0..num_windows {
 
         // step b. above
