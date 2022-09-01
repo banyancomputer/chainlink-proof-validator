@@ -75,14 +75,13 @@ pub async fn get_deal_info(offer_id: u64) -> Result<OnChainDealInfo, anyhow::Err
     let provider = Provider::<Http>::try_from(api_token.as_str())
         .expect("could not instantiate HTTP Provider");
     let address = 
-        "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
+        "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>()?; 
     let abi: Abi = 
         serde_json::from_str(fs::read_to_string("contract_abi.json")
                                 .expect("can't read file")
                                 .as_str())?;
     let contract = 
         Contract::new(address, abi, provider);
-
     
     let deal_start_block: BlockNum = BlockNum(contract
         .method::<_, U256>("getDealStartBlock", deal_id.0)?
@@ -172,7 +171,7 @@ pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Er
     let provider = Provider::<Http>::try_from(api_token)
             .expect("could not instantiate HTTP Provider");
     let address = 
-        "0x9ee596734485268eF62db4f3E61d891E221504f6".parse::<Address>()?; 
+        "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>()?; 
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json")
                                             .expect("can't read file")
                                             .as_str())?;
@@ -181,7 +180,7 @@ pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Er
 
     let contract = Contract::new(address, abi, provider);
     let block: u64 = contract
-        .method::<_, U256>("getProofBlock", [offer_id, window_num])?
+        .method::<_, U256>("getProofBlock", (offer_id, window_num))?
         .call()
         .await?.as_u64();
 
@@ -214,9 +213,6 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         Ok(d) => d,
         Err(e) => return construct_error(500, format!("Error in get_deal_info: {:?}", e))
     };
-
-    println!("deal info: {:?}", deal_info);
-
     // checking that deal is either finished or cancelled
     let current_block_num = match provider.get_block_number().await {
         Ok(num) => num,
