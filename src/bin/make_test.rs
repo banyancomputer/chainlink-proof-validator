@@ -1,14 +1,15 @@
 use core::slice;
-use std::{fs::{File, read, copy},
-          io::{Read, Write}};
+use std::{fs::{File, read_dir},
+          io::{Read, Write, Cursor}};
 use ethers::{types::H256,
              providers::{Middleware, Provider, Http}};
-use anyhow::Error;
+use anyhow::{Error, anyhow};
 use tempfile;
 
 use banyan_shared::{types::*, proofs};
+use eyre::Result;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Quality {
     Good,
     Bad
@@ -27,66 +28,83 @@ pub async fn compute_target_block_hash(target_window_start: BlockNum) -> Result<
     Ok(target_block_hash)
 }
 
-/* Reads a local text file from a directory called "files/" and finds the 
-   length of the file */
+/* Reads a local text file and finds the length of the file */
 pub fn file_len(file_name: &str) -> usize {
-    let mut file_content = Vec::new();
-    let dir = "files/";
-    let full_path = format!("{}{}", dir, file_name);
-    let mut file = File::open(&full_path).expect("Unable to open file");
+    let mut file_content = Vec::new();    
+    let mut file = File::open(&file_name).expect("Unable to open file");
     file.read_to_end(&mut file_content).expect("Unable to read");
     let length = file_content.len();
     return length;
 }
 
-pub async fn create_proof_helper(target_window_start: BlockNum, file: &str, quality: Quality) -> Result<(bao::Hash, u64, Vec<u8>), Error> {
+pub async fn create_proof_helper(target_window_start: BlockNum, 
+                                 file: &str, 
+                                 quality: Quality,
+                                 target_dir: &str) -> Result<(bao::Hash, u64), Error> {
     std::fs::create_dir_all("proofs/")?;
     let target_block_hash = compute_target_block_hash(target_window_start).await?;
     let split = file.split(".").collect::<Vec<&str>>();
-    let input_file_name = split[0];
-    let file_length = file_len(input_file_name) as u64;
+    let input_file_path = split[0];
+    let file_length = file_len(file) as u64;
     let (chunk_offset, chunk_size) = 
         proofs::compute_random_block_choice_from_hash(target_block_hash, file_length);
     
     let f = File::open(file)?;
-    let (hash, mut bao_file) = proofs::gen_obao(f).await?;
-    let mut slice_input_file = tempfile::tempfile()?;
-    if quality == Quality::Bad {
-        let mut bytes: Vec<u8> = Vec::new();
-        bao_file.read_to_end(&mut bytes)?;
-        let last_index = bytes.len() - 1;
-        bytes[last_index] ^= 1;
-        slice_input_file.write(&bytes)?;
-    }
-    else {
-        slice_input_file = bao_file;
-    }
-    
-    let mut extractor = 
-        bao::encode::SliceExtractor::new(slice_input_file, 
+    let (hash, bao_file) = proofs::gen_obao(f).await?;
+    let extractor = 
+        bao::encode::SliceExtractor::new(bao_file, 
                                         chunk_offset, 
                                         chunk_size);
     let mut slice = Vec::new();
-    extractor.read_to_end(&mut slice)?;
+    let (mut slice_file, _) = extractor.into_inner();
+    slice_file.read_to_end(&mut slice)?;
 
-    Ok((hash, file_length, slice))
+    if quality == Quality::Bad {
+        let last_index = slice.len() - 1;
+        slice[last_index] ^= 1;
+    }
+    let input_file_name = input_file_path.split('/').next_back().unwrap();
+    println!("{input_file_name}");
+    let new = format!("{}/{}_proof_{:?}.txt", target_dir, input_file_name, quality);
+    println!("{new}");
+    let mut proof_file = 
+        File::create(new)?;
+    proof_file.write_all(&slice)?;
+
+    Ok((hash, file_length))
 }
 
-pub async fn create_good_proof(target_window_start: BlockNum, file: &str) -> Result<(bao::Hash, u64, Vec<u8>), Error> {
-    create_proof_helper(target_window_start, file, Quality::Good).await
+pub async fn create_good_proof(target_window_start: BlockNum, file: &str, target_dir: &str) -> Result<(bao::Hash, u64), Error> {
+    create_proof_helper(target_window_start, file, Quality::Good, target_dir).await
 }
 
-pub async fn create_bad_proof(target_window_start: BlockNum, file: &str) -> Result<(bao::Hash, u64, Vec<u8>), Error> {
-    create_proof_helper(target_window_start, file, Quality::Bad).await
+pub async fn create_bad_proof(target_window_start: BlockNum, file: &str, target_dir: &str) -> Result<(bao::Hash, u64), Error> {
+    create_proof_helper(target_window_start, file, Quality::Bad, target_dir).await
 }
 
-fn main() {
-    let file_name = "files/filecoin.pdf";
-    let mut file_content = Vec::new();
-    let mut file = File::open(&file_name).expect("Unable to open file");
-    file.read_to_end(&mut file_content).expect("Unable to read");
-    let length = file_content.len();
-    println!("file length: {}", length);
+pub async fn create_proofs(target_window_starts: &[BlockNum], input_dir: &str, target_dir: &str) -> Result<Vec<(bao::Hash, u64)>, Error> {
+    let mut result: Vec<(bao::Hash, u64)> = Vec::new();
+    let paths = read_dir(input_dir)?;
+    for (target_window_start, file) in target_window_starts.iter().zip(paths) {
+        let file = file?.path();
+        let file: &str = match file.to_str() {
+            Some(f) => f,
+            None => return Err(anyhow!("Could not convert file name {:?} to string.", file))
+        };
+        println!("Creating proof for file {} with target_window_start {}", file, target_window_start.0);
+        result.push(create_good_proof(*target_window_start, file, target_dir).await?);
+        result.push(create_bad_proof(*target_window_start, file, target_dir).await?);
+    }
+    Ok(result)
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let target_window_starts = [BlockNum(1), BlockNum(2)];
+    let input_dir = "/Users/zevkent/Rust-Chainlink-EA-API/files/";
+    let target_dir = "/Users/zevkent/Rust-Chainlink-EA-API/proofs/";
+    create_proofs(&target_window_starts, input_dir, target_dir).await?;
+    Ok(())
 }
 
 #[cfg(test)]

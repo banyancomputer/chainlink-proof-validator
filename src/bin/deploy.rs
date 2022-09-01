@@ -7,18 +7,17 @@ extern crate serde;
 extern crate serde_json;
 extern crate rust_chainlink_ea_api;
 
-use rocket::serde::{Serialize, Deserialize, json::Json};
-use ethers::{providers::{Middleware, Provider, Http},
-             types::{Filter, H256, Address, U256},
-             contract::{Contract},
-             abi::{Abi}};
-use anyhow;
-use std::{io::{Read, Cursor},
-          str::FromStr,
-          fs};
-use cid;
-use multihash::Multihash;
-use multibase::decode;
+use rust_chainlink_ea_api::validate;
+use rocket::serde::{Serialize, Deserialize, json};
+use eyre::Result;
+use validate::get_deal_info;
+use ethers::{providers::{Provider, Middleware, Http},
+             types::{Address, H256},
+             contract::Contract,
+             abi::Abi};
+use banyan_shared::types::*;
+use std::fs;
+
 
 use banyan_shared::{types::*, proofs};
 use dotenv::dotenv;
@@ -48,8 +47,8 @@ pub async fn deploy_helper () -> Result<(), anyhow::Error> {
     let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE"; 
     let file_size = 941366; 
     let blake3_checksum = "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f"; 
-    let value = json!({"deal_id": deal_id, "deal_start_block": deal_start_block, "deal_length_in_blocks": deal_length_in_blocks, "proof_frequency_in_blocks": proof_frequency_in_blocks, "price": price, "collateral": collateral, "erc20_token_denomination": erc20_token_denomination, "ipfs_file_cid": ipfs_file_cid, "file_size": file_size, "blake3_checksum": blake3_checksum});
-    let deal = from_value(value)?;
+    let value = json::json!({"deal_id": deal_id, "deal_start_block": deal_start_block, "deal_length_in_blocks": deal_length_in_blocks, "proof_frequency_in_blocks": proof_frequency_in_blocks, "price": price, "collateral": collateral, "erc20_token_denomination": erc20_token_denomination, "ipfs_file_cid": ipfs_file_cid, "file_size": file_size, "blake3_checksum": blake3_checksum});
+    let deal = json::from_value(value)?;
 
     let call = contract
     .method::<_, H256>("createOffer", deal)?;
