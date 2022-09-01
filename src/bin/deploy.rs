@@ -7,14 +7,24 @@ extern crate serde;
 extern crate serde_json;
 extern crate rust_chainlink_ea_api;
 
-use rust_chainlink_ea_api::validate;
 use rocket::serde::{Serialize, Deserialize, json::Json};
-use eyre::Result;
-use validate::{ChainlinkRequest, MyResult};
-use ethers::providers::{Provider, Middleware, Http};
-use std::time::Duration;
+use ethers::{providers::{Middleware, Provider, Http},
+             types::{Filter, H256, Address, U256},
+             contract::{Contract},
+             abi::{Abi}};
+use anyhow;
+use std::{io::{Read, Cursor},
+          str::FromStr,
+          fs};
+use cid;
+use multihash::Multihash;
+use multibase::decode;
 
-pub async fn deploy_helper () -> Result<OnChainDealInfo, anyhow::Error> {
+use banyan_shared::{types::*, proofs};
+use dotenv::dotenv;
+
+/*
+pub async fn deploy_helper () -> Result<(), anyhow::Error> {
     
     let provider = Provider::<Http>::try_from(
         "https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
@@ -44,14 +54,36 @@ pub async fn deploy_helper () -> Result<OnChainDealInfo, anyhow::Error> {
     let call = contract
     .method::<_, H256>("createOffer", deal)?;
     let pending_tx = call.send().await?;
+    Ok(())
+}
+*/
 
-    println!("Reciept{:?}", call);
-    Ok(get_deal_info(55378008).await?)
+pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Error> {
+
+    //let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let provider = Provider::<Http>::try_from("https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+            .expect("could not instantiate HTTP Provider");
+    let address = 
+        "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>()?; 
+    let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json")
+                                            .expect("can't read file")
+                                            .as_str())?;
+    println!("offer_id: {}", offer_id);
+    println!("window_num: {}", window_num);
+
+    let contract = Contract::new(address, abi, provider);
+
+    let block: u64 = contract
+        .method::<_, U256>("getProofBlock", (offer_id, window_num))?
+        .call()
+        .await?.as_u64();
+
+    return Ok(block);
 }
 
-
-async fn main() -> Result<OnChainDealInfo, anyhow::Error> {
-    let deal_info = deploy_helper().await;
-    println!(deal_info);
-    Ok(deal_info)
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    let block = get_block(0, 0).await?;
+    println!("no chance {:}", block);
+    Ok(())
 }
