@@ -24,7 +24,7 @@ pub fn compute_random_block_choice_from_hash(block_hash: H256, file_length: u64)
     };
     (chunk_offset, chunk_size)
 }
-/* 
+/*
 /// returns the root hash of the obao as well as the file where it's temporarily stored
 pub async fn gen_obao<R: Read>(mut reader: R) -> Result<(bao::Hash, File)> {
     // make a temp file to hold the obao
