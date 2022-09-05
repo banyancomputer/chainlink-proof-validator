@@ -310,18 +310,18 @@ pub async fn validate_deal_internal(input_data: Json<ChainlinkRequest>) -> Resul
     }
     if num_windows > 0
     {
-        Json(MyResult {data: ResponseData { offer_id: offer_id, 
+        Ok(Json(MyResult {data: ResponseData { offer_id: offer_id, 
                                             success_count: success_count, 
                                             num_windows: num_windows as u64, 
                                             status: 200,
-                                            result: "Ok".to_string()}})
+                                            result: "Ok".to_string()}}))
     }
     else {
-        Json(MyResult {data: ResponseData { offer_id: offer_id, 
+        Ok(Json(MyResult {data: ResponseData { offer_id: offer_id, 
                                             success_count: success_count, 
                                             num_windows: num_windows as u64, 
                                             status: 500,
-                                            result: "No windows found".to_string()}})
+                                            result: "No windows found".to_string()}}))
     }
 }
 
