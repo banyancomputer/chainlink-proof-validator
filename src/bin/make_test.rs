@@ -100,9 +100,18 @@ pub async fn create_proofs(target_window_starts: &[BlockNum], input_dir: &str, t
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
+    // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by 
+    // the size of the window. In the integration testing, do the same calculation for the first target_window, 
+    // create the deal, log the first proof, add the size of the window, and wait until the current_window is fast 
+    // forwarded by size of the window, and log the second proof. 
+    // 
+    // Concurrently, calculate the two target windows, and then the folders will be created with the files by rust. 
+    // Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script. 
+
     let target_window_starts = [BlockNum(1), BlockNum(2)];
-    let input_dir = "/Users/zevkent/Rust-Chainlink-EA-API/files/";
-    let target_dir = "/Users/zevkent/Rust-Chainlink-EA-API/proofs/";
+    let input_dir = "../Rust-Chainlink-EA-API/files/";
+    let target_dir = "../Rust-Chainlink-EA-API/proofs/";
     create_proofs(&target_window_starts, input_dir, target_dir).await?;
     Ok(())
 }

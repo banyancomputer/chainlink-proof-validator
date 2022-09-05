@@ -175,8 +175,6 @@ pub async fn get_block(offer_id: u64, window_num: u64) -> Result<u64, anyhow::Er
     let abi: Abi = serde_json::from_str(fs::read_to_string("contract_abi.json")
                                             .expect("can't read file")
                                             .as_str())?;
-    println!("offer_id: {}", offer_id);
-    println!("window_num: {}", window_num);
 
     let contract = Contract::new(address, abi, provider);
     let block: u64 = contract
@@ -270,10 +268,17 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
         };
 
         // step e. above
+        println!("target_block_hash: {:?}", target_block_hash);
+        println!("file_size {:?}", deal_info.file_size);
+        
         let (chunk_offset, chunk_size) = 
             proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
         
         // step f. above
+        println!("checksum: {:?}", deal_info.blake3_checksum);
+        println!("chunk_offset: {:?}", chunk_offset);
+        println!("chunk_size: {:?}", chunk_size);
+
         let mut decoded = Vec::new();
         let mut decoder = 
             bao::decode::SliceDecoder::new(proof_bytes, 
@@ -283,14 +288,22 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
         match decoder.read_to_end(&mut decoded) {
             Ok(_res) => success_count += 1,
-            Err(e) => return construct_error(500, format!("Could not read proof: {e}"))
+            Err(_e) => println!("Error in decoding: {:?}", window_num)
         };
     }
-    
-    Json(MyResult {data: ResponseData { offer_id: offer_id, 
-                                        success_count: success_count, 
-                                        num_windows: num_windows as u64, 
-                                        status: 200,
-                                        result: "Ok".to_string()}})
-    
+    if num_windows > 0
+    {
+        Json(MyResult {data: ResponseData { offer_id: offer_id, 
+                                            success_count: success_count, 
+                                            num_windows: num_windows as u64, 
+                                            status: 200,
+                                            result: "Ok".to_string()}})
+    }
+    else {
+        Json(MyResult {data: ResponseData { offer_id: offer_id, 
+                                            success_count: success_count, 
+                                            num_windows: num_windows as u64, 
+                                            status: 500,
+                                            result: "No windows found".to_string()}})
+    }
 }
