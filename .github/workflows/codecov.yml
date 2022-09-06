@@ -1,0 +1,62 @@
+name: Codecov
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C link-dead-code"
+
+jobs:
+  #call_setup:
+  #  uses: ./.github/workflows/setup.yml
+  build_and_test:
+    name: Rust project - latest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          #- stable
+          #- beta
+          - nightly
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+      - run: rustup component add rustfmt
+      - run: rustup component add clippy
+      - run: cargo update
+      - name: Install package
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev
+      #      - uses: codecov/codecov-action@v3
+      #        with:
+      #          file: ./target/debug/coverage/coverage-final.json
+      #          flags: unittests
+      #          name: codecov-umbrella
+      #          fail_ci_if_error: true
+      #          verbose: true
+      - run: cargo build --verbose
+      - name: Generate coverage report
+        run: |
+          wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+          tar xzf master.tar.gz &&
+          cd kcov-master &&
+          mkdir build &&
+          cd build &&
+          cmake .. &&
+          make &&
+          make install DESTDIR=../../kcov-build &&
+          cd ../.. &&
+          rm -rf kcov-master &&
+          for file in target/debug/Rust-Chainlink-EA-API*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+          bash <(curl -s https://codecov.io/bash) &&
+          echo "Uploaded code coverage"
