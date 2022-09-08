@@ -6,7 +6,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
-use banyan_shared::ipfs;
+use banyan_shared::{ipfs, types::*};
 use eyre::Result;
 use rocket::serde::{json, Deserialize, Serialize};
 use rust_chainlink_ea_api::validate;
@@ -15,15 +15,15 @@ use ethers::{
     abi::Abi,
     contract::{Contract, BaseContract},
     types::{Address, H256, U256},
+    signers::{LocalWallet, Signer, Wallet},
+    middleware::SignerMiddleware,
+    providers::{Middleware, Provider, Http}
 };
-use ethers_signers::{LocalWallet, Signer, Wallet};
-use ethers_middleware::SignerMiddleware;
-use ethers_providers::{Middleware, Provider, Http};
 
 //use banyan_shared::types::{DealID, DealInfo, DealStatus, Token, TokenDenomination, TokenValue, TokenAmount, BlockNum};
 
 use std::fs;
-use rust_chainlink_ea_api::types::*;
+//use rust_chainlink_ea_api::types::*;
 use dotenv::dotenv;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::TransactionRequest;
@@ -42,15 +42,15 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
             .as_str(),
     )?;
     let contract = Contract::new(address, abi, provider);
-    let deal_id = 55378008;
-    let deal_start_block = 2;
-    let deal_length_in_blocks = 3;
-    let proof_frequency_in_blocks = 4;
-    let price = 5;
-    let collateral = 6;
-    //let input: [u8; 20] = [0xf6, 0x79, 0xd8, 0xd8, 0xa9, 0x0f, 0x66, 0xb4, 0xd8, 0xd9, 0xbf, 0x4f, 0x26,0x97, 0xd5,0x32,0x79,0xf4,0x2b,0xea];
-    //let erc20_token_denomination = Token(ethers::types::H160(input));
-    let erc20_token_denomination = "hello".to_string();
+    let deal_id = DealID(55378008);
+    let deal_start_block = BlockNum(2);
+    let deal_length_in_blocks = BlockNum(3);
+    let proof_frequency_in_blocks = BlockNum(4);
+    let price = TokenAmount(5);
+    let collateral = TokenAmount(6);
+    let input: [u8; 20] = [0xf6, 0x79, 0xd8, 0xd8, 0xa9, 0x0f, 0x66, 0xb4, 0xd8, 0xd9, 0xbf, 0x4f, 0x26,0x97, 0xd5,0x32,0x79,0xf4,0x2b,0xea];
+    let erc20_token_denomination = Token(ethers::types::H160(input));
+    //let erc20_token_denomination = "hello".to_string();
 
     //let cid_return = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE";
     //let coda = "z".to_owned();
@@ -63,8 +63,8 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     let file_size = 941366;
     let blake3_checksum = "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f".to_string();
 
-    let deal: OnChainDealInfoSimple = OnChainDealInfoSimple{
-        offerId: deal_id,
+    /*let deal: OnChainDealInfo = OnChainDealInfo {
+        deal_id: deal_id,
         deal_start_block: deal_start_block,
         deal_length_in_blocks: deal_length_in_blocks,
         proof_frequency_in_blocks: proof_frequency_in_blocks,
@@ -98,7 +98,7 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     let pending_tx = call.send().await?;
     println!("here4");
     let receipt = pending_tx.confirmations(6).await?;
-    println!("{:?}", receipt);
+    println!("{:?}", receipt);*/
     Ok(())
 
 }
