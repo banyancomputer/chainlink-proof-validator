@@ -5,11 +5,12 @@ use ethers::{
 };
 use std::{
     fs::{read_dir, File},
-    io::{Read, Write, Seek},
+    io::{Read, Seek, Write, Cursor},
 };
 
 use banyan_shared::{proofs, types::*};
 use eyre::Result;
+use dotenv::dotenv;
 
 #[derive(PartialEq, Debug)]
 pub enum Quality {
@@ -17,20 +18,19 @@ pub enum Quality {
     Bad,
 }
 
-
-// Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by 
-// the size of the window. In the integration testing, do the same calculation for the first target_window, 
-// create the deal, log the first proof, add the size of the window, and wait until the current_window is fast 
-// forwarded by size of the window, and log the second proof. 
-// 
-// Concurrently, calculate the two target windows, and then the folders will be created with the files by rust. 
-// Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script. 
-
+// Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
+// the size of the window. In the integration testing, do the same calculation for the first target_window,
+// create the deal, log the first proof, add the size of the window, and wait until the current_window is fast
+// forwarded by size of the window, and log the second proof.
+//
+// Concurrently, calculate the two target windows, and then the folders will be created with the files by rust.
+// Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script.
 
 /* Computes the target block hash from the target block number */
 pub async fn compute_target_block_hash(target_window_start: BlockNum) -> Result<H256, Error> {
+    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from("https://goerli.infura.io/v3/1a39a4b49b9f4b8ba1338cd2064fe8fe")
+        Provider::<Http>::try_from(api_token)
             .expect("could not instantiate HTTP Provider");
 
     let target_block_hash = match provider.get_block(target_window_start.0).await? {
@@ -60,19 +60,19 @@ pub async fn create_proof_helper(
     let target_block_hash = compute_target_block_hash(target_window_start).await?;
 
     // file stuff
-    let split = file.split(".").collect::<Vec<&str>>();
-    let input_file_path = split[0];
+    let split = file.split('.').collect::<Vec<&str>>();
+    let input_file_path = split[2];
     let input_file_name = input_file_path.split('/').next_back().unwrap();
     let file_length = file_len(file) as u64;
-    println!("file length: {file_length}");
     let (chunk_offset, chunk_size) =
         proofs::compute_random_block_choice_from_hash(target_block_hash, file_length);
-    println!("{chunk_offset}, {chunk_size}");
 
     let mut f = File::open(file)?;
-    let (hash, obao_file) = proofs::gen_obao(&f).await?;
+    let (obao_file, hash) = proofs::gen_obao(&f)?;
     f.rewind()?;
-    let mut extractor = bao::encode::SliceExtractor::new_outboard(f, obao_file, chunk_offset, chunk_size);
+    let cursor = Cursor::new(obao_file);
+    let mut extractor =
+        bao::encode::SliceExtractor::new_outboard(f, cursor, chunk_offset, chunk_size);
     let mut slice = Vec::new();
     extractor.read_to_end(&mut slice)?;
 
@@ -81,10 +81,7 @@ pub async fn create_proof_helper(
         slice[last_index] ^= 1;
     }
 
-    println!("{input_file_name}");
-    let new = format!("{}/{}_proof_{:?}.txt", target_dir, input_file_name, quality);
-    println!("{new}");
-    let mut proof_file = File::create(new)?;
+    let mut proof_file = File::create(format!("{}{}_proof_{:?}.txt", target_dir, input_file_name, quality))?;
     proof_file.write_all(&slice)?;
 
     Ok((hash, file_length))
@@ -119,10 +116,6 @@ pub async fn create_proofs(
             Some(f) => f,
             None => return Err(anyhow!("Could not convert file name {:?} to string.", file)),
         };
-        println!(
-            "Creating proof for file {} with target_window_start {}",
-            file, target_window_start.0
-        );
         result.push(create_good_proof(*target_window_start, file, target_dir).await?);
         result.push(create_bad_proof(*target_window_start, file, target_dir).await?);
     }
@@ -131,15 +124,14 @@ pub async fn create_proofs(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
-    // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by 
-    // the size of the window. In the integration testing, do the same calculation for the first target_window, 
-    // create the deal, log the first proof, add the size of the window, and wait until the current_window is fast 
-    // forwarded by size of the window, and log the second proof. 
-    // 
-    // Concurrently, calculate the two target windows, and then the folders will be created with the files by rust. 
-    // Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script. 
-
+    // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
+    // the size of the window. In the integration testing, do the same calculation for the first target_window,
+    // create the deal, log the first proof, add the size of the window, and wait until the current_window is fast
+    // forwarded by size of the window, and log the second proof.
+    //
+    // Concurrently, calculate the two target windows, and then the folders will be created with the files by rust.
+    // Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script.
+    dotenv().ok();
     let target_window_starts = [BlockNum(1), BlockNum(2)];
     let input_dir = "../Rust-Chainlink-EA-API/files/";
     let target_dir = "../Rust-Chainlink-EA-API/proofs/";
