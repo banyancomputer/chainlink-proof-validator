@@ -108,17 +108,41 @@ pub struct OnChainDealInfo {
 
 impl Tokenize for OnChainDealInfo {
     fn into_tokens(self) -> Vec<ethers::abi::Token> {
-        let result: Vec<ethers::abi::Token> = 
-            vec![Uint(U256::from(self.deal_id.0)),
-                 Uint(U256::from(self.deal_start_block.0)),
-                 Uint(U256::from(self.deal_length_in_blocks.0)),
-                 Uint(U256::from(self.proof_frequency_in_blocks.0)),
-                 Uint(U256::from(self.price.0)),
-                 Uint(U256::from(self.collateral.0)),
-                 Ad(self.erc20_token_denomination.0),
-                 Str(self.ipfs_file_cid.to_string()),
-                 Uint(U256::from(self.file_size)),
-                 Str(self.blake3_checksum.to_string())];
+        /*let mut res: Vec<ethers::abi::Token> = Vec::new();
+        println!("1");
+        res.push(Uint(U256::from(self.deal_id.0)));
+        println!("2");
+        res.push(Uint(U256::from(self.deal_start_block.0)));
+        println!("3");
+        res.push(Uint(U256::from(self.deal_length_in_blocks.0)));
+        println!("4");
+        res.push(Uint(U256::from(self.proof_frequency_in_blocks.0)));
+        println!("5");
+        res.push(Uint(U256::from(self.price.0)));
+        println!("6");
+        res.push(Uint(U256::from(self.collateral.0)));
+        println!("7");
+        res.push(Ad(self.erc20_token_denomination.0));
+        println!("8");
+        res.push(Str(self.ipfs_file_cid.to_string()));
+        println!("9");
+        res.push(Uint(U256::from(self.file_size)));
+        println!("10");
+        res.push(Str(self.blake3_checksum.to_string()));
+        println!("11");
+        return res;*/
+        let result: Vec<ethers::abi::Token> = vec![
+            Uint(U256::from(self.deal_id.0)),
+            Uint(U256::from(self.deal_start_block.0)),
+            Uint(U256::from(self.deal_length_in_blocks.0)),
+            Uint(U256::from(self.proof_frequency_in_blocks.0)),
+            Uint(U256::from(self.price.0)),
+            Uint(U256::from(self.collateral.0)),
+            Ad(self.erc20_token_denomination.0),
+            Str(self.ipfs_file_cid.to_string()),
+            Uint(U256::from(self.file_size)),
+            Str(self.blake3_checksum.to_string()),
+        ];
         return result;
     }
 }
