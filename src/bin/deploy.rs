@@ -19,11 +19,7 @@ use ethers::{
     middleware::SignerMiddleware,
     providers::{Middleware, Provider, Http}
 };
-
-//use banyan_shared::types::{DealID, DealInfo, DealStatus, Token, TokenDenomination, TokenValue, TokenAmount, BlockNum};
-
 use std::fs;
-//use rust_chainlink_ea_api::types::*;
 use dotenv::dotenv;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::TransactionRequest;

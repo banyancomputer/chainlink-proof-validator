@@ -100,13 +100,14 @@ pub struct MyResult {
 /*
     Gets the deal info from on chain.
 */
-pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::Error> {
+async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::Error> {
 
     let contract = Contract::new(*ADDRESS, (*ABI).clone(), &*PROVIDER);
+    let offer_id = deal_id.0;
 
     let deal_start_block: BlockNum = BlockNum(
         contract
-            .method::<_, U256>("getDealStartBlock", deal_id.0)?
+            .method::<_, U256>("getDealStartBlock", offer_id)?
             .call()
             .await?
             .as_u64(),
@@ -114,7 +115,7 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
 
     let deal_length_in_blocks: BlockNum = BlockNum(
         contract
-            .method::<_, U256>("getDealLengthInBlocks", deal_id.0)?
+            .method::<_, U256>("getDealLengthInBlocks", offer_id)?
             .call()
             .await?
             .as_u64(),
@@ -122,7 +123,7 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
 
     let proof_frequency_in_blocks: BlockNum = BlockNum(
         contract
-            .method::<_, U256>("getProofFrequencyInBlocks", deal_id.0)?
+            .method::<_, U256>("getProofFrequencyInBlocks", offer_id)?
             .call()
             .await?
             .as_u64(),
@@ -130,7 +131,7 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
 
     let price: TokenAmount = TokenAmount(
         contract
-            .method::<_, U256>("getPrice", deal_id.0)?
+            .method::<_, U256>("getPrice", offer_id)?
             .call()
             .await?
             .as_u64(),
@@ -138,7 +139,7 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
 
     let collateral: TokenAmount = TokenAmount(
         contract
-            .method::<_, U256>("getCollateral", deal_id.0)?
+            .method::<_, U256>("getCollateral", offer_id)?
             .call()
             .await?
             .as_u64(),
@@ -146,13 +147,13 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
 
     let erc20_token_denomination: Token = Token(
         contract
-            .method::<_, Address>("getErc20TokenDenomination", deal_id.0)?
+            .method::<_, Address>("getErc20TokenDenomination", offer_id)?
             .call()
             .await?,
     );
 
     let cid_return: String = contract
-        .method::<_, String>("getIpfsFileCid", deal_id.0)?
+        .method::<_, String>("getIpfsFileCid", offer_id)?
         .call()
         .await?;
     let code = "z".to_owned();
@@ -162,12 +163,12 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
     let ipfs_file_cid = cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
 
     let file_size: u64 = contract
-        .method::<_, u64>("getFileSize", deal_id.0)?
+        .method::<_, u64>("getFileSize", offer_id)?
         .call()
         .await?;
 
     let blake3_return: String = contract
-        .method::<_, String>("getBlake3Checksum", deal_id.0)?
+        .method::<_, String>("getBlake3Checksum", offer_id)?
         .call()
         .await?;
     let blake3_checksum = bao::Hash::from_str(&blake3_return)?;
@@ -188,7 +189,8 @@ pub async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::E
     Ok(deal_info)
 }
 
-pub fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
+/* Function to construct an error response to return to Chainlink */
+fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
     Json(MyResult {
         data: ResponseData {
             deal_id,
@@ -200,8 +202,9 @@ pub fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
     })
 }
 
-pub async fn get_block_from_window(deal_id: DealID, window_num: u64) -> Result<u64, anyhow::Error> {
-
+/* Function to get the block number that is associated with a certain deal id 
+   and window number */
+async fn get_block_from_window(deal_id: DealID, window_num: u64) -> Result<u64, anyhow::Error> {
     let contract = Contract::new(*ADDRESS, (*ABI).clone(), &*PROVIDER);
     let block: u64 = contract
         .method::<_, U256>("getProofBlock", (deal_id.0, window_num))?
@@ -212,11 +215,12 @@ pub async fn get_block_from_window(deal_id: DealID, window_num: u64) -> Result<u
     return Ok(block);
 }
 
+/* Function to check if the deal is over or not */
 fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
     current_block_num > deal_info.deal_start_block + deal_info.deal_length_in_blocks
 }
 
-pub async fn validate_deal_internal(
+async fn validate_deal_internal(
     deal_id: DealID,
 ) -> Result<Json<MyResult>, String> {
     dotenv().ok();
@@ -228,7 +232,7 @@ pub async fn validate_deal_internal(
         .map_err(|e| format!("Error in get_deal_info: {:?}", e))?;
 
     // checking that deal is either finished or cancelled
-    let current_block_num = BlockNum(PROVIDER
+    let current_block_num = BlockNum((*PROVIDER)
         .get_block_number()
         .await
         .map_err(|e| format!("Couldn't get most recent block number: {e}"))?
@@ -251,6 +255,7 @@ pub async fn validate_deal_internal(
     let num_windows: usize =
         math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
+
     // iterating over proof blocks (by window)
     for window_num in 0..num_windows {
         // step b. above
@@ -261,7 +266,7 @@ pub async fn validate_deal_internal(
         let filter: Filter = Filter::new()
             .select(block)
             .topic1(H256::from_low_u64_be(deal_id.0));
-        let block_logs = PROVIDER
+        let block_logs = (*PROVIDER)
             .get_logs(&filter)
             .await
             .map_err(|e| format!("Couldn't get logs from block {}: {}", current_block_num.0, e))?;
@@ -275,7 +280,7 @@ pub async fn validate_deal_internal(
 
         // step d. above
         // write provider.get_block(block_num: BlockNum)
-        let target_block_hash = PROVIDER
+        let target_block_hash = (*PROVIDER)
             .get_block(target_window_start.0)
             .await
             .map_err(|e| format!("Could not get block number {}: {}", target_window_start.0, e))?
@@ -284,17 +289,10 @@ pub async fn validate_deal_internal(
             .ok_or(format!("Could not get hash of block {}", target_window_start.0))?;
 
         // step e. above
-        println!("target_block_hash: {:?}", target_block_hash);
-        println!("file_size {:?}", deal_info.file_size);
-
         let (chunk_offset, chunk_size) =
             proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
 
         // step f. above
-        println!("checksum: {:?}", deal_info.blake3_checksum);
-        println!("chunk_offset: {:?}", chunk_offset);
-        println!("chunk_size: {:?}", chunk_size);
-
         let mut decoded = Vec::new();
         let mut decoder = bao::decode::SliceDecoder::new(
             proof_bytes,
@@ -331,7 +329,7 @@ pub async fn validate_deal_internal(
     }
 }
 
-pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
+async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
     let deal_id = input_data.into_inner().data.deal_id;
     validate_deal_internal(deal_id)
         .await
@@ -340,7 +338,5 @@ pub async fn validate_deal(input_data: Json<ChainlinkRequest>) -> Json<MyResult>
 
 #[post("/validate", format = "json", data = "<input_data>")]
 pub async fn validate(input_data: Json<ChainlinkRequest>) -> Json<MyResult> {
-    /* Call your own function that returns a Json<MyResult>
-    (MyResult is consistent with the Chainlink EA specs) */
     validate_deal(input_data).await
 }
