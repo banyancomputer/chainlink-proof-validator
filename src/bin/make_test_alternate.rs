@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Error};
+use bao::Hash;
 use ethers::{
     providers::{Http, Middleware, Provider},
     types::H256,
@@ -49,7 +50,7 @@ pub fn file_len(file_name: &str) -> usize {
     return length;
 }
 
-pub fn jonah_obao<R: Read>(mut reader: R) -> Result<(Vec<u8>, bao::Hash)> {
+pub fn jonah_obao<R: Read>(mut reader: R) -> Result<(Vec<u8>, Hash)> {
     let mut file_content = Vec::new();
     reader
         .read_to_end(&mut file_content)
@@ -58,20 +59,29 @@ pub fn jonah_obao<R: Read>(mut reader: R) -> Result<(Vec<u8>, bao::Hash)> {
     let (obao, hash) = bao::encode::outboard(&file_content);
     Ok((obao, hash)) // return the outboard encoding
 }
+pub async fn hash_and_length_helper(
+    file: &str,
+) -> Result<(Hash, u64), Error> {
+    let file_length = file_len(file) as u64;
+    let mut f = File::open(file)?;
+    let (_obao_file, hash) = jonah_obao(&f).unwrap();
+    return Ok((hash, file_length));
+}
 
 pub async fn create_proof_helper(
     target_window_start: BlockNum,
     file: &str,
     quality: Quality,
     target_dir: &str,
-) -> Result<(bao::Hash, u64), Error> {
+) -> Result<(Hash, u64), Error> {
     std::fs::create_dir_all("proofs/")?;
 
     let target_block_hash = compute_target_block_hash(target_window_start).await?;
 
     // file stuff
     let split = file.split(".").collect::<Vec<&str>>();
-    let input_file_path = split[0];
+    let input_file_path = split[2];
+
     let input_file_name = input_file_path.split('/').next_back().unwrap();
     let file_length = file_len(file) as u64;
     println!("file length: {file_length}");
@@ -120,7 +130,7 @@ pub async fn create_good_proof(
     target_window_start: BlockNum,
     file: &str,
     target_dir: &str,
-) -> Result<(bao::Hash, u64), Error> {
+) -> Result<(Hash, u64), Error> {
     create_proof_helper(target_window_start, file, Quality::Good, target_dir).await
 }
 
@@ -128,7 +138,7 @@ pub async fn create_bad_proof(
     target_window_start: BlockNum,
     file: &str,
     target_dir: &str,
-) -> Result<(bao::Hash, u64), Error> {
+) -> Result<(Hash, u64), Error> {
     create_proof_helper(target_window_start, file, Quality::Bad, target_dir).await
 }
 
@@ -136,8 +146,8 @@ pub async fn create_proofs(
     target_window_starts: &[BlockNum],
     input_dir: &str,
     target_dir: &str,
-) -> Result<Vec<(bao::Hash, u64)>, Error> {
-    let mut result: Vec<(bao::Hash, u64)> = Vec::new();
+) -> Result<Vec<(Hash, u64)>, Error> {
+    let mut result: Vec<(Hash, u64)> = Vec::new();
     let paths = read_dir(input_dir)?;
     for (target_window_start, file) in target_window_starts.iter().zip(paths) {
         let file = file?.path();
@@ -155,6 +165,18 @@ pub async fn create_proofs(
     Ok(result)
 }
 
+/*
+pub async fn create_proof (
+    target_window_start: BlockNum,
+    target_file: &str,
+    target_dir: &str,
+    quality: Quality
+) -> Result<(Hash,u64), Error> 
+{
+
+}
+*/
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
@@ -168,7 +190,8 @@ async fn main() -> anyhow::Result<()> {
     let target_window_starts = [BlockNum(1), BlockNum(2)];
     let input_dir = "../Rust-Chainlink-EA-API/files/";
     let target_dir = "../Rust-Chainlink-EA-API/proofs/";
-    create_proofs(&target_window_starts, input_dir, target_dir).await?;
+    let proofs = create_proofs(&target_window_starts, input_dir, target_dir).await?;
+    println!("Proofs {:?}", proofs);
     Ok(())
 }
 // add tests to check that good proof is good and bad proof is bad
