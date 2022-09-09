@@ -24,7 +24,7 @@ use std::{
     fs::{read_dir, File},
     io::{Read, Seek, Write},
 };
-
+use std::env;
 
 pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     println!("running deploy helper 3");
@@ -98,16 +98,19 @@ pub async fn proof_helper() -> Result<(), anyhow::Error> {
     //let contract = BaseContract::from(abi);
     let contract = Contract::new(address, abi, provider);
     
+    let dir = env::current_dir()?;
+    println!("{}", dir.display());
+
     let name = "save_proof";
-    let file_name = "../Rust-Chainlink-EA-API/proofs/ethereum_proof_Good.txt";
+    let file_name = "/Users/jonahkaye/Desktop/Banyan/Rust-Chainlink-EA-API/proofs/ethereum_proof_Good.txt";
     let mut file_content = Vec::new();
     let mut file = File::open(&file_name).expect("Unable to open file");
     file.read_to_end(&mut file_content).expect("Unable to read");
-    let proof = file_content;
     let offer_id: u64 = 613;
     let target_window: u64  = 10; 
-    let args = (proof, offer_id, target_window);
+    let args = (file_content, offer_id, target_window);
     let data = contract.encode(name, args).unwrap();
+
 
     let sender: Address = "0x8A4E8e012a5B9EC7817a7936e41DcD84489CE5ed".parse::<Address>()?;
 
@@ -138,9 +141,5 @@ async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     //let _th = deploy_helper().await?;
     let _ph = proof_helper().await?;
-
-
-
-
     Ok(())
 }
