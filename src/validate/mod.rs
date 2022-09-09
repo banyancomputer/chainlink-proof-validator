@@ -31,7 +31,12 @@ cargo build --release for benchmarking
 codecov, cicd
 */
 use anyhow::Result;
-use banyan_shared::{eth::VitalikProvider, proofs, types::*};
+use banyan_shared::{
+        eth::VitalikProvider, 
+        proofs,
+        proofs::window, 
+        types::*
+    };
 use dotenv::dotenv;
 use ethers::types::{Filter, H256};
 use rocket::{
@@ -92,10 +97,12 @@ fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
 async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, String> {
     dotenv().ok();
     let mut success_count = 0;
-    let url = std::env::var("API_KEY")
-        .expect("API_KEY must be set.");
-    let provider = VitalikProvider::new(url, 1)
-        .map_err(|e| format!("error with creating provider: {e}"))?;
+    let api_url = std::env::var("URL").expect("URL must be set.");
+    let api_key = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let url = format!("{}{}", api_url, api_key);
+    let contract_address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
+    let provider =
+        VitalikProvider::new(url, contract_address, 1).map_err(|e| format!("error with creating provider: {e}"))?;
 
     let deal_info = provider
         .get_onchain(deal_id)
@@ -120,35 +127,33 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
         false => deal_info.deal_length_in_blocks,
         true => agreed_upon_cancellation_block - deal_info.deal_start_block,
     };
-    let window_size = deal_info.proof_frequency_in_blocks.0;
+    let window_size = deal_info.proof_frequency_in_blocks;
     // this should be in window_uril.rs and tested meticulously (it might eb in the proof_gen.rs thing)
-    let num_windows: usize =
-        math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
+    let num_windows = window::get_num_windows(deal_length_in_blocks, window_size)
+        .map_err(|e| format!("Could not get number of windows: {e}"))?;
 
     // iterating over proof blocks (by window)
     for window_num in 0..num_windows {
         // step b. above
-        let block = provider
+        let block_num = provider
             .get_block_num_from_window(deal_id, window_num as u64)
             .await
             .map_err(|e| format!("Could not get block: {e}"))?;
 
         let filter: Filter = Filter::new()
-            .select(block.0)
+            .select(block_num.0)
             .topic1(H256::from_low_u64_be(deal_id.0));
 
         let block_logs = provider.get_logs_from_filter(filter).await.map_err(|e| {
             format!(
                 "Couldn't get logs from block {}: {}",
-                current_block_num.0, e
+                block_num.0, e
             )
         })?;
         let proof_bytes = Cursor::new(&block_logs[0].data);
 
         // step c. above
-        // impl Mul(u: usize) for BlockNum {} in types
-        let target_window_start: BlockNum =
-            BlockNum(window_num as u64 * window_size + deal_info.deal_start_block.0);
+        let target_window_start: BlockNum = window_size * window_num + deal_info.deal_start_block;
 
         // step d. above
         let target_block_hash = provider
