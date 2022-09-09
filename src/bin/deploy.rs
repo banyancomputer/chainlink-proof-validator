@@ -11,26 +11,24 @@ use eyre::Result;
 use rocket::serde::{json, Deserialize, Serialize};
 use rust_chainlink_ea_api::validate;
 //use validate::get_deal_info;
-use ethers::{
-    abi::Abi,
-    contract::{Contract, BaseContract},
-    types::{Address, H256, U256},
-    signers::{LocalWallet, Signer, Wallet},
-    middleware::SignerMiddleware,
-    providers::{Middleware, Provider, Http}
-};
-use std::fs;
 use dotenv::dotenv;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::types::TransactionRequest;
-
+use ethers::{
+    abi::Abi,
+    contract::{BaseContract, Contract},
+    middleware::SignerMiddleware,
+    providers::{Http, Middleware, Provider},
+    signers::{LocalWallet, Signer, Wallet},
+    types::{Address, H256, U256},
+};
+use std::fs;
 
 pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     println!("running deploy helper");
     let api_key: String = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from(api_key)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
     let address = "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("contract_abi.json")
@@ -44,7 +42,10 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     let proof_frequency_in_blocks = BlockNum(4);
     let price = TokenAmount(5);
     let collateral = TokenAmount(6);
-    let input: [u8; 20] = [0xf6, 0x79, 0xd8, 0xd8, 0xa9, 0x0f, 0x66, 0xb4, 0xd8, 0xd9, 0xbf, 0x4f, 0x26,0x97, 0xd5,0x32,0x79,0xf4,0x2b,0xea];
+    let input: [u8; 20] = [
+        0xf6, 0x79, 0xd8, 0xd8, 0xa9, 0x0f, 0x66, 0xb4, 0xd8, 0xd9, 0xbf, 0x4f, 0x26, 0x97, 0xd5,
+        0x32, 0x79, 0xf4, 0x2b, 0xea,
+    ];
     let erc20_token_denomination = Token(ethers::types::H160(input));
     //let erc20_token_denomination = "hello".to_string();
 
@@ -57,7 +58,8 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE".to_string();
 
     let file_size = 941366;
-    let blake3_checksum = "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f".to_string();
+    let blake3_checksum =
+        "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f".to_string();
 
     /*let deal: OnChainDealInfo = OnChainDealInfo {
         deal_id: deal_id,
@@ -96,16 +98,13 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
     let receipt = pending_tx.confirmations(6).await?;
     println!("{:?}", receipt);*/
     Ok(())
-
 }
-
 
 pub async fn deploy_helper_2() -> Result<(), anyhow::Error> {
     println!("running deploy helper 2");
     let api_key: String = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from(api_key)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
     let address = "0xEc8AcFb22Ff663Df44C14c71c306E0fF31470d35".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("test_contract_abi.json")
@@ -130,8 +129,7 @@ pub async fn deploy_helper_3() -> Result<(), anyhow::Error> {
     let private_key: String = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY must be set.");
 
     let provider =
-        Provider::<Http>::try_from(api_key)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
     let address = "0xb3d3A786F84094a712eba1D2873CF810156a8338".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("test_contract_abi.json")
@@ -149,8 +147,8 @@ pub async fn deploy_helper_3() -> Result<(), anyhow::Error> {
     let name = "setDeal";
     let args = "blakeeeeeeeee".to_string();
     let data = contract.encode(name, args).unwrap();
-    
-    let sender: Address= "0x8A4E8e012a5B9EC7817a7936e41DcD84489CE5ed".parse::<Address>()?;
+
+    let sender: Address = "0x8A4E8e012a5B9EC7817a7936e41DcD84489CE5ed".parse::<Address>()?;
 
     let mut transaction = TransactionRequest::new()
         .to(address)
@@ -172,7 +170,7 @@ pub async fn deploy_helper_3() -> Result<(), anyhow::Error> {
 
     /*
     let signed_tx = client.sign_transaction(&TypedTransaction::Legacy(transaction), sender).await?;
-    The send transaction automatically signs since its called bu the client which is built with the wallet. 
+    The send transaction automatically signs since its called bu the client which is built with the wallet.
     */
 
     let pending_tx = client.send_transaction(transaction, None).await?;
@@ -187,14 +185,13 @@ pub async fn deploy_helper_3() -> Result<(), anyhow::Error> {
 
     let deal_id = 0;
     let checksum = contract
-            .method::<_, U256>("getDeal", deal_id)?
-            .call()
-            .await?
-            .as_u64();
+        .method::<_, U256>("getDeal", deal_id)?
+        .call()
+        .await?
+        .as_u64();
 
     println!("checksum: {}", checksum);
     Ok(())
-
 }
 
 // proof helper
@@ -202,8 +199,7 @@ pub async fn proof_helper() -> Result<(), anyhow::Error> {
     println!("running proof helper");
     let api_key: String = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from(api_key)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
     let address = "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("contract_abi.json")
@@ -229,7 +225,7 @@ pub async fn proof_helper() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// public function to modify ethereum state variable in simple contract 
+// public function to modify ethereum state variable in simple contract
 /*
 pub async fn test_helper() -> Result<(), anyhow::Error> {
 
@@ -245,7 +241,7 @@ pub async fn test_helper() -> Result<(), anyhow::Error> {
     let wallet: Wallet<> = "0x8A4E8e012a5B9EC7817a7936e41DcD84489CE5ed".parse()?;
     let client = Client::new(provider, wallet);
     let contract = Contract::new(address, abi, client);
-    
+
 
     let deal_id = 0;
     let checksum = "c1ae1d61257675c1e1740c2061dabfeded7575eb27aea8aa4eca88b7d69bd64f";

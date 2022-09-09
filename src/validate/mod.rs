@@ -30,46 +30,20 @@ cargo build --release for benchmarking
 
 codecov, cicd
 */
-use anyhow;
-use cid;
-use ethers::{
-        abi::Abi,
-        contract::Contract,
-        providers::{Http, Middleware, Provider},
-        types::{Address, Filter, H256, U256, H160}
-};
-use multibase::decode;
-use multihash::Multihash;
-use rocket::{serde::{json::Json, Deserialize, Serialize},
-            post};
-use std::{
-    fs,
-    io::{Cursor, Read},
-    str::FromStr,
-};
-
-use banyan_shared::{proofs, types::*};
+use anyhow::Result;
+use banyan_shared::{eth::VitalikProvider, proofs, types::*};
 use dotenv::dotenv;
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref API_TOKEN: String = std::env::var("API_KEY").expect("API_KEY must be set.");
-    static ref PROVIDER: Provider<Http> = Provider::<Http>::try_from(API_TOKEN.as_str())
-    .expect("could not instantiate HTTP Provider");
-    static ref ABI: Abi = serde_json::from_str(
-        fs::read_to_string("contract_abi.json")
-            .expect("can't read file")
-            .as_str()
-        ).expect("couldn't load abi");
-    static ref ADDRESS: H160 = "0xeb3d5882faC966079dcdB909dE9769160a0a00Ac"
-        .parse::<Address>()
-        .expect("could not parse contract address");
-}
+use ethers::types::{Filter, H256};
+use rocket::{
+    post,
+    serde::{json::Json, Deserialize, Serialize},
+};
+use std::io::{Cursor, Read};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Status {
     Success,
-    Failure
+    Failure,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -80,12 +54,12 @@ pub struct ChainlinkRequest {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RequestData {
-    pub deal_id: DealID
+    pub deal_id: DealID,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResponseData {
-    pub deal_id: DealID, 
+    pub deal_id: DealID,
     pub success_count: u64,
     pub num_windows: u64,
 }
@@ -94,99 +68,7 @@ pub struct ResponseData {
 pub struct MyResult {
     pub data: ResponseData,
     pub status: Status,
-    pub result: String
-}
-
-/*
-    Gets the deal info from on chain.
-*/
-async fn get_deal_info(deal_id: DealID) -> Result<OnChainDealInfo, anyhow::Error> {
-
-    let contract = Contract::new(*ADDRESS, (*ABI).clone(), &*PROVIDER);
-    let offer_id = deal_id.0;
-
-    let deal_start_block: BlockNum = BlockNum(
-        contract
-            .method::<_, U256>("getDealStartBlock", offer_id)?
-            .call()
-            .await?
-            .as_u64(),
-    );
-
-    let deal_length_in_blocks: BlockNum = BlockNum(
-        contract
-            .method::<_, U256>("getDealLengthInBlocks", offer_id)?
-            .call()
-            .await?
-            .as_u64(),
-    );
-
-    let proof_frequency_in_blocks: BlockNum = BlockNum(
-        contract
-            .method::<_, U256>("getProofFrequencyInBlocks", offer_id)?
-            .call()
-            .await?
-            .as_u64(),
-    );
-
-    let price: TokenAmount = TokenAmount(
-        contract
-            .method::<_, U256>("getPrice", offer_id)?
-            .call()
-            .await?
-            .as_u64(),
-    );
-
-    let collateral: TokenAmount = TokenAmount(
-        contract
-            .method::<_, U256>("getCollateral", offer_id)?
-            .call()
-            .await?
-            .as_u64(),
-    );
-
-    let erc20_token_denomination: Token = Token(
-        contract
-            .method::<_, Address>("getErc20TokenDenomination", offer_id)?
-            .call()
-            .await?,
-    );
-
-    let cid_return: String = contract
-        .method::<_, String>("getIpfsFileCid", offer_id)?
-        .call()
-        .await?;
-    let code = "z".to_owned();
-    let full_cid = format!("{}{}", code, cid_return);
-    let (_, decoded) = decode(full_cid)?;
-    let reader = Cursor::new(decoded);
-    let ipfs_file_cid = cid::CidGeneric::new_v0(Multihash::read(reader)?)?;
-
-    let file_size: u64 = contract
-        .method::<_, u64>("getFileSize", offer_id)?
-        .call()
-        .await?;
-
-    let blake3_return: String = contract
-        .method::<_, String>("getBlake3Checksum", offer_id)?
-        .call()
-        .await?;
-    let blake3_checksum = bao::Hash::from_str(&blake3_return)?;
-
-    let deal_info: OnChainDealInfo = OnChainDealInfo {
-        deal_id,
-        deal_start_block,
-        deal_length_in_blocks,
-        proof_frequency_in_blocks,
-        price,
-        collateral,
-        erc20_token_denomination,
-        ipfs_file_cid,
-        file_size,
-        blake3_checksum,
-    };
-
-    Ok(deal_info)
+    pub result: String,
 }
 
 /* Function to construct an error response to return to Chainlink */
@@ -198,21 +80,8 @@ fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
             num_windows: 0,
         },
         status: Status::Failure,
-        result: reason
+        result: reason,
     })
-}
-
-/* Function to get the block number that is associated with a certain deal id 
-   and window number */
-async fn get_block_from_window(deal_id: DealID, window_num: u64) -> Result<u64, anyhow::Error> {
-    let contract = Contract::new(*ADDRESS, (*ABI).clone(), &*PROVIDER);
-    let block: u64 = contract
-        .method::<_, U256>("getProofBlock", (deal_id.0, window_num))?
-        .call()
-        .await?
-        .as_u64();
-
-    return Ok(block);
 }
 
 /* Function to check if the deal is over or not */
@@ -220,23 +89,24 @@ fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
     current_block_num > deal_info.deal_start_block + deal_info.deal_length_in_blocks
 }
 
-async fn validate_deal_internal(
-    deal_id: DealID,
-) -> Result<Json<MyResult>, String> {
+async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, String> {
     dotenv().ok();
     let mut success_count = 0;
+    let url = std::env::var("API_KEY")
+        .expect("API_KEY must be set.");
+    let provider = VitalikProvider::new(url, 1)
+        .map_err(|e| format!("error with creating provider: {e}"))?;
 
-    // getting deal info from on chain
-    let deal_info = get_deal_info(deal_id)
+    let deal_info = provider
+        .get_onchain(deal_id)
         .await
-        .map_err(|e| format!("Error in get_deal_info: {:?}", e))?;
+        .map_err(|e| format!("Error in get_onchain: {:?}", e))?;
 
     // checking that deal is either finished or cancelled
-    let current_block_num = BlockNum((*PROVIDER)
-        .get_block_number()
+    let current_block_num = provider
+        .get_latest_block_num()
         .await
-        .map_err(|e| format!("Couldn't get most recent block number: {e}"))?
-        .as_u64());
+        .map_err(|e| format!("Couldn't get most recent block number: {e}"))?;
 
     let deal_over = deal_over(current_block_num, deal_info);
     let deal_cancelled = false; // need to figure out how to get this
@@ -255,22 +125,24 @@ async fn validate_deal_internal(
     let num_windows: usize =
         math::round::ceil((deal_length_in_blocks.0 / window_size) as f64, 0) as usize;
 
-
     // iterating over proof blocks (by window)
     for window_num in 0..num_windows {
         // step b. above
-        let block = get_block_from_window(deal_id, window_num as u64)
+        let block = provider
+            .get_block_num_from_window(deal_id, window_num as u64)
             .await
             .map_err(|e| format!("Could not get block: {e}"))?;
 
         let filter: Filter = Filter::new()
-            .select(block)
+            .select(block.0)
             .topic1(H256::from_low_u64_be(deal_id.0));
-        let block_logs = (*PROVIDER)
-            .get_logs(&filter)
-            .await
-            .map_err(|e| format!("Couldn't get logs from block {}: {}", current_block_num.0, e))?;
 
+        let block_logs = provider.get_logs_from_filter(filter).await.map_err(|e| {
+            format!(
+                "Couldn't get logs from block {}: {}",
+                current_block_num.0, e
+            )
+        })?;
         let proof_bytes = Cursor::new(&block_logs[0].data);
 
         // step c. above
@@ -279,14 +151,15 @@ async fn validate_deal_internal(
             BlockNum(window_num as u64 * window_size + deal_info.deal_start_block.0);
 
         // step d. above
-        // write provider.get_block(block_num: BlockNum)
-        let target_block_hash = (*PROVIDER)
-            .get_block(target_window_start.0)
+        let target_block_hash = provider
+            .get_block_hash_from_num(target_window_start)
             .await
-            .map_err(|e| format!("Could not get block number {}: {}", target_window_start.0, e))?
-            .ok_or(format!("Could not unpack block number {}", target_window_start.0))?
-            .hash
-            .ok_or(format!("Could not get hash of block {}", target_window_start.0))?;
+            .map_err(|e| {
+                format!(
+                    "Could not get hash of block number {}: {}",
+                    target_window_start.0, e
+                )
+            })?;
 
         // step e. above
         let (chunk_offset, chunk_size) =
@@ -314,7 +187,7 @@ async fn validate_deal_internal(
                 num_windows: num_windows as u64,
             },
             status: Status::Success,
-            result: "Ok".to_string()
+            result: "Ok".to_string(),
         }))
     } else {
         Ok(Json(MyResult {
@@ -324,7 +197,7 @@ async fn validate_deal_internal(
                 num_windows: num_windows as u64,
             },
             status: Status::Failure,
-            result: "No windows found".to_string()
+            result: "No windows found".to_string(),
         }))
     }
 }

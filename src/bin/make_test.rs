@@ -5,14 +5,14 @@ use ethers::{
 };
 use std::{
     fs::{read_dir, File},
-    io::{Read, Seek, Write, Cursor},
+    io::{Cursor, Read, Seek, Write},
 };
 
-use banyan_shared::{proofs, types::*};
-use eyre::Result;
+use banyan_shared::{proofs, types::*, eth::VitalikProvider};
 use dotenv::dotenv;
+use eyre::Result;
 
-#[derive(PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Quality {
     Good,
     Bad,
@@ -30,8 +30,7 @@ pub enum Quality {
 pub async fn compute_target_block_hash(target_window_start: BlockNum) -> Result<H256, Error> {
     let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from(api_token)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_token).expect("could not instantiate HTTP Provider");
 
     let target_block_hash = match provider.get_block(target_window_start.0).await? {
         Some(h) => h.hash.unwrap(),
@@ -46,7 +45,7 @@ pub fn file_len(file_name: &str) -> usize {
     let mut file = File::open(&file_name).expect("Unable to open file");
     file.read_to_end(&mut file_content).expect("Unable to read");
     let length = file_content.len();
-    return length;
+    length
 }
 
 pub async fn create_proof_helper(
@@ -81,7 +80,10 @@ pub async fn create_proof_helper(
         slice[last_index] ^= 1;
     }
 
-    let mut proof_file = File::create(format!("{}{}_proof_{:?}.txt", target_dir, input_file_name, quality))?;
+    let mut proof_file = File::create(format!(
+        "{}{}_proof_{:?}.txt",
+        target_dir, input_file_name, quality
+    ))?;
     proof_file.write_all(&slice)?;
 
     Ok((hash, file_length))
@@ -124,6 +126,11 @@ pub async fn create_proofs(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv().ok();
+    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let provider = VitalikProvider::new(api_token, 1)?;
+    let _ = provider.get_onchain(DealID(55378008)).await?;
+
     // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
     // the size of the window. In the integration testing, do the same calculation for the first target_window,
     // create the deal, log the first proof, add the size of the window, and wait until the current_window is fast
@@ -131,11 +138,11 @@ async fn main() -> anyhow::Result<()> {
     //
     // Concurrently, calculate the two target windows, and then the folders will be created with the files by rust.
     // Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script.
-    dotenv().ok();
-    let target_window_starts = [BlockNum(1), BlockNum(2)];
+
+    /*let target_window_starts = [BlockNum(1), BlockNum(2)];
     let input_dir = "../Rust-Chainlink-EA-API/files/";
     let target_dir = "../Rust-Chainlink-EA-API/proofs/";
-    create_proofs(&target_window_starts, input_dir, target_dir).await?;
+    create_proofs(&target_window_starts, input_dir, target_dir).await?;*/
     Ok(())
 }
 // add tests to check that good proof is good and bad proof is bad
