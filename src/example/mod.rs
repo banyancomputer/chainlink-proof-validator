@@ -1,13 +1,13 @@
-use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket::post;
-use std::time::Duration;
 use ethers::providers::{Http, Middleware, Provider};
+use rocket::post;
+use rocket::serde::{json::Json, Deserialize, Serialize};
+use std::time::Duration;
 
 /* Example data structures */
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Status {
     Success,
-    Faliure
+    Faliure,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,15 +36,13 @@ fn construct_error(reason: String) -> Json<ExampleResponse> {
     })
 }
 
-
 async fn compute_internal(
     input_data: Json<ExampleRequest>,
 ) -> Result<Json<ExampleResponse>, String> {
     let block_num = input_data.into_inner().data.block_num;
     let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
     let provider =
-        Provider::<Http>::try_from(api_token)
-            .expect("could not instantiate HTTP Provider");
+        Provider::<Http>::try_from(api_token).expect("could not instantiate HTTP Provider");
 
     // Getting the most recent block number
     let current_block_num = provider.get_block_number().await.map_or_else(
@@ -94,5 +92,5 @@ async fn compute_internal(
 pub async fn compute(input_data: Json<ExampleRequest>) -> Json<ExampleResponse> {
     compute_internal(input_data)
         .await
-        .map_or_else(|e| construct_error(e), |v| v)
+        .map_or_else(construct_error, |v| v)
 }
