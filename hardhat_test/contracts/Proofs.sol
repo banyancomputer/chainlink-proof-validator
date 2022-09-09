@@ -46,6 +46,11 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         deals[_deal.offerId] = _deal;
     }
 
+    function createOfferShallow (uint256 _offerId, uint256 _deal_start_block, uint256 _deal_length_in_blocks, uint256 _proof_frequency_in_blocks, uint256 _file_size, string calldata _blake3_checksum) public {
+        Deal memory deal = Deal(_offerId, _deal_start_block, _deal_length_in_blocks, _proof_frequency_in_blocks, 0, 0, address(0), "", _file_size, _blake3_checksum);
+        deals[_offerId] = deal;
+    }
+
     function getDeal(uint256 _offerId) public view returns (Deal memory) {
         return deals[_offerId];
     }

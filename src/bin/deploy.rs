@@ -33,7 +33,7 @@ pub async fn deploy_helper() -> Result<(), anyhow::Error> {
 
     let provider =
         Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
-    let address = "0x293D1F6DA24F4cb26eEEe6ea05D77a3D6b97bc83".parse::<Address>()?; // old addr
+    let address = "0xf8bc718Bd3Af1B19f3139078a5A2A2d8589cb797".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("test_contract_abi.json")
             .expect("can't read file")
@@ -84,7 +84,7 @@ pub async fn proof_helper() -> Result<(), anyhow::Error> {
 
     let provider =
         Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
-    let address = "0x293D1F6DA24F4cb26eEEe6ea05D77a3D6b97bc83".parse::<Address>()?; // old addr
+    let address = "0xf8bc718Bd3Af1B19f3139078a5A2A2d8589cb797".parse::<Address>()?; // old addr
     let abi: Abi = serde_json::from_str(
         fs::read_to_string("test_contract_abi.json")
             .expect("can't read file")
