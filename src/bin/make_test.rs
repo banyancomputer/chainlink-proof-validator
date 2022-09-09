@@ -1,16 +1,15 @@
 use anyhow::{anyhow, Error};
+use banyan_shared::{eth::VitalikProvider, proofs, types::*};
+use dotenv::dotenv;
 use ethers::{
     providers::{Http, Middleware, Provider},
     types::H256,
 };
+use eyre::Result;
 use std::{
     fs::{read_dir, File},
     io::{Cursor, Read, Seek, Write},
 };
-
-use banyan_shared::{eth::VitalikProvider, proofs, types::*};
-use dotenv::dotenv;
-use eyre::Result;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Quality {
@@ -130,7 +129,8 @@ async fn main() -> anyhow::Result<()> {
     let api_url = std::env::var("URL").expect("URL must be set.");
     let api_key = std::env::var("API_KEY").expect("API_KEY must be set.");
     let url = format!("{}{}", api_url, api_key);
-    let contract_address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
+    let contract_address =
+        std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
     let provider = VitalikProvider::new(url, contract_address, 1)?;
     let info = provider.get_onchain(DealID(55378008)).await?;
     println!("{:?}", info);

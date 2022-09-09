@@ -31,12 +31,7 @@ cargo build --release for benchmarking
 codecov, cicd
 */
 use anyhow::Result;
-use banyan_shared::{
-        eth::VitalikProvider, 
-        proofs,
-        proofs::window, 
-        types::*
-    };
+use banyan_shared::{eth::VitalikProvider, proofs, proofs::window, types::*};
 use dotenv::dotenv;
 use ethers::types::{Filter, H256};
 use rocket::{
@@ -100,9 +95,10 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
     let api_url = std::env::var("URL").expect("URL must be set.");
     let api_key = std::env::var("API_KEY").expect("API_KEY must be set.");
     let url = format!("{}{}", api_url, api_key);
-    let contract_address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
-    let provider =
-        VitalikProvider::new(url, contract_address, 1).map_err(|e| format!("error with creating provider: {e}"))?;
+    let contract_address =
+        std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
+    let provider = VitalikProvider::new(url, contract_address, 1)
+        .map_err(|e| format!("error with creating provider: {e}"))?;
 
     let deal_info = provider
         .get_onchain(deal_id)
@@ -144,12 +140,10 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
             .select(block_num.0)
             .topic1(H256::from_low_u64_be(deal_id.0));
 
-        let block_logs = provider.get_logs_from_filter(filter).await.map_err(|e| {
-            format!(
-                "Couldn't get logs from block {}: {}",
-                block_num.0, e
-            )
-        })?;
+        let block_logs = provider
+            .get_logs_from_filter(filter)
+            .await
+            .map_err(|e| format!("Couldn't get logs from block {}: {}", block_num.0, e))?;
         let proof_bytes = Cursor::new(&block_logs[0].data);
 
         // step c. above
