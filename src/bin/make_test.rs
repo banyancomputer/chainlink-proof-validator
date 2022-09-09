@@ -8,7 +8,7 @@ use std::{
     io::{Cursor, Read, Seek, Write},
 };
 
-use banyan_shared::{proofs, types::*, eth::VitalikProvider};
+use banyan_shared::{eth::VitalikProvider, proofs, types::*};
 use dotenv::dotenv;
 use eyre::Result;
 
@@ -127,9 +127,13 @@ pub async fn create_proofs(
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
-    let api_token = std::env::var("API_KEY").expect("API_KEY must be set.");
-    let provider = VitalikProvider::new(api_token, 1)?;
-    let _ = provider.get_onchain(DealID(55378008)).await?;
+    let api_url = std::env::var("URL").expect("URL must be set.");
+    let api_key = std::env::var("API_KEY").expect("API_KEY must be set.");
+    let url = format!("{}{}", api_url, api_key);
+    let contract_address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
+    let provider = VitalikProvider::new(url, contract_address, 1)?;
+    let info = provider.get_onchain(DealID(55378008)).await?;
+    println!("{:?}", info);
 
     // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
     // the size of the window. In the integration testing, do the same calculation for the first target_window,
