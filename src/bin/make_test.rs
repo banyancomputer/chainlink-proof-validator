@@ -37,6 +37,14 @@ pub async fn compute_target_block_hash(target_window_start: BlockNum) -> Result<
     };
     Ok(target_block_hash)
 }
+pub fn hash_and_length_helper(
+    file: &str,
+) -> Result<(bao::Hash, u64), Error> {
+    let file_length = file_len(file) as u64;
+    let mut f = File::open(file)?;
+    let (_obao_file, hash) = proofs::gen_obao(&f).unwrap();
+    return Ok((hash, file_length));
+}
 
 /* Reads a local text file and finds the length of the file */
 pub fn file_len(file_name: &str) -> usize {
