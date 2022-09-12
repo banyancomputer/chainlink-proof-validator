@@ -13,7 +13,7 @@ use rocket::serde::{json, Deserialize, Serialize};
 use ethers::{
     abi::Abi,
     contract::{Contract},
-    types::{Address, U256,TransactionRequest},
+    types::{Address, U256,TransactionRequest, Bytes},
     signers::{LocalWallet, Signer},
     middleware::SignerMiddleware,
     providers::{Middleware, Provider, Http}
@@ -108,7 +108,7 @@ pub async fn proof_helper() -> Result<(), anyhow::Error> {
     file.read_to_end(&mut file_content).expect("Unable to read");
     let offer_id: u64 = 613;
     let target_window: u64  = 10; 
-    let args = (file_content, offer_id, target_window);
+    let args = (Bytes::from(file_content), offer_id, target_window);
     let data = contract.encode(name, args).unwrap();
 
 
