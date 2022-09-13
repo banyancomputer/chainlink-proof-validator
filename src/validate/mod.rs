@@ -38,7 +38,8 @@ use rocket::{
     post,
     serde::{json::Json, Deserialize, Serialize},
 };
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Seek};
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Status {
@@ -92,14 +93,13 @@ fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
 async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, String> {
     dotenv().ok();
     let mut success_count = 0;
-    let api_url = std::env::var("URL").expect("URL must be set.");
     let api_key = std::env::var("API_KEY").expect("API_KEY must be set.");
-    let url = format!("{}{}", api_url, api_key);
     let contract_address =
         std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
-    let provider = VitalikProvider::new(url, contract_address, 1)
+    let provider = VitalikProvider::new(api_key, contract_address)
         .map_err(|e| format!("error with creating provider: {e}"))?;
 
+    println!("deal id: {}", deal_id.0);
     let deal_info = provider
         .get_onchain(deal_id)
         .await
@@ -129,7 +129,7 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
         .map_err(|e| format!("Could not get number of windows: {e}"))?;
 
     // iterating over proof blocks (by window)
-    for window_num in 0..num_windows {
+    for window_num in 1..num_windows + 1 {
         // step b. above
         let block_num = provider
             .get_block_num_from_window(deal_id, window_num as u64)
@@ -141,10 +141,17 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
             .topic1(H256::from_low_u64_be(deal_id.0));
 
         let block_logs = provider
-            .get_logs_from_filter(filter)
+            .get_logs_from_filter(&filter)
             .await
             .map_err(|e| format!("Couldn't get logs from block {}: {}", block_num.0, e))?;
-        let proof_bytes = Cursor::new(&block_logs[0].data);
+        //let proof_bytes = Cursor::new(&block_logs[0].data);
+
+        let data = &block_logs[0].data;
+        let data_size = data.get(32..64).unwrap();
+        println!("size: {:?}", data_size);
+        let end: usize = 1672 + 64;
+        let data_bytes = data.get(64..end).unwrap();
+        let proof_bytes = Cursor::new(data_bytes);
 
         // step c. above
         let target_window_start: BlockNum = window_size * window_num + deal_info.deal_start_block;
@@ -163,6 +170,12 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
         // step e. above
         let (chunk_offset, chunk_size) =
             proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
+        println!("file size: {}", deal_info.file_size);
+        println!("target window: {}", target_window_start.0);
+        println!("chunk offset val: {}", chunk_offset);
+        println!("checksum: {}", deal_info.blake3_checksum);
+        //get length of proof_bytes
+        println!("proof size: {}", &block_logs[0].data.len());
 
         // step f. above
         let mut decoded = Vec::new();
