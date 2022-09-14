@@ -11,7 +11,6 @@ serde = "*"
 serde_json = "*"
 serde_derive = "*"
 ethers = { git = "https://github.com/gakonst/ethers-rs" }
-eyre = "0.6.8"
 tokio = "1.20.1"
 bytes = "0.4.12"
 anyhow = {version = "1.0", features = ["std", "backtrace"] }
@@ -20,8 +19,9 @@ blake3 = "1.3.1"
 cid = "0.8.6"
 sled = "0.34"
 ctor = "0.1.23"
-banyan-shared = {path = "/Users/jonahkaye/Desktop/Banyan/banyan-shared-rs" }
+banyan-shared ={ path = "/Users/laudiacay/GolandProjects/banyan-shared" }
 dotenv = "0.15.0"
 reqwest = "0.11.11"
 hex = "0.4.3"
 rand = "0.8.5"
+log = "0.4.17"

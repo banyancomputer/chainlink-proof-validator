@@ -1,6 +1,4 @@
-use eyre::Result;
 use rand::Rng;
-use rocket::serde::json::json;
 use rust_chainlink_ea_api::validate::MyResult;
 
 use dotenv::dotenv;
@@ -12,6 +10,7 @@ use ethers::{
     signers::{LocalWallet, Signer},
     types::{Address, Bytes, TransactionRequest},
 };
+use serde_json::json;
 use std::fs;
 use std::{fs::File, io::Read};
 
@@ -129,7 +128,7 @@ pub async fn api_call(offer_id: u64, api_url: String) -> Result<u64, anyhow::Err
         .json::<MyResult>()
         .await?;
     println!("{:?}", res);
-    return Ok(res.data.success_count);
+    Ok(res.data.success_count)
 }
 
 #[tokio::main]
@@ -152,7 +151,6 @@ mod tests {
 
     use anyhow::{anyhow, Error};
     use banyan_shared::{eth::VitalikProvider, proofs, types::*};
-    use eyre::Result;
     use std::{
         fs::{read_dir, File},
         io::{Cursor, Read, Seek, Write},
@@ -416,15 +414,17 @@ mod tests {
         );
         let offset: u64 = target_block - deal_start_block;
         assert!(offset < deal_length_in_blocks);
-        assert!(offset % proof_frequency_in_blocks == 0);
+        assert_eq!(offset % proof_frequency_in_blocks, 0);
         let window_num = offset / proof_frequency_in_blocks;
         println!("window_num: {:}", window_num);
         let file_name = "../Rust-Chainlink-EA-API/files/ethereum.pdf";
         let target_dir = "../Rust-Chainlink-EA-API/proofs/";
         let target_block = target_block; //(proof_frequency_in_blocks * i);
-        let (hash, file_length): (bao::Hash, u64) = make_test::create_good_proof(
-            banyan_shared::types::BlockNum(target_block),
+        let (hash, file_length): (bao::Hash, u64) = create_proof_helper(
+            provider.clone(),
+            BlockNum(target_block),
             file_name,
+            Quality::Good,
             target_dir,
         )
         .await?;

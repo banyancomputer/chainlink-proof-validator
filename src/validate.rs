@@ -33,6 +33,7 @@ cargo build --release for benchmarking
 use anyhow::Result;
 use banyan_shared::{eth::VitalikProvider, proofs, proofs::window, types::*};
 use ethers::types::{Filter, H256};
+use log::info;
 use rocket::{
     post,
     serde::{json::Json, Deserialize, Serialize},
@@ -40,7 +41,6 @@ use rocket::{
 };
 use std::io::{Cursor, Read};
 use std::sync::Arc;
-use rocket::log::private::log;
 
 const WORD: usize = 32;
 
@@ -75,7 +75,7 @@ pub struct MyResult {
     pub result: String,
 }
 
-pub struct WebserverState(pub Arc<banyan_shared::eth::VitalikProvider>);
+pub struct WebserverState(pub Arc<VitalikProvider>);
 
 /* Function to construct an error response to return to Chainlink */
 fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
@@ -103,7 +103,6 @@ async fn validate_deal_internal(
     provider: Arc<VitalikProvider>,
     deal_id: DealID,
 ) -> Result<Json<MyResult>, String> {
-
     let deal_info = provider
         .get_onchain(deal_id)
         .await
@@ -125,20 +124,23 @@ async fn validate_deal_internal(
 
     // this computes the actual deal length based on potential cancellation? and gets real number of windows :)
     let agreed_upon_cancellation_block: BlockNum = BlockNum(0u64); // need to figure out how to get this
-    let deal_length_in_blocks = match deal_cancelled {
-        false => deal_info.deal_length_in_blocks,
-        true => agreed_upon_cancellation_block - deal_info.deal_start_block,
+    let deal_length_in_blocks = if deal_cancelled {
+        agreed_upon_cancellation_block - deal_info.deal_start_block
+    } else {
+        deal_info.deal_length_in_blocks
     };
-    let num_windows = window::get_num_windows(deal_length_in_blocks, deal_info.proof_frequency_in_blocks)
-        .map_err(|e| format!("Could not get number of windows: {e}"))?;
+    let num_windows =
+        window::get_num_windows(deal_length_in_blocks, deal_info.proof_frequency_in_blocks)
+            .map_err(|e| format!("Could not get number of windows: {e}"))?;
 
     // iterating over proof blocks (by window)
     let mut success_count = 0;
     for window_num in 0..num_windows {
         // TODO should be in banyan_shared
-        let target_window_start = deal_info.proof_frequency_in_blocks * window_num + deal_info.deal_start_block;
+        let target_window_start =
+            deal_info.proof_frequency_in_blocks * window_num + deal_info.deal_start_block;
         let target_block_hash = provider
-            .get_block_hash(target_window_start)
+            .get_block_hash_from_num(target_window_start)
             .await
             .map_err(|e| format!("Could not get block hash: {e}"))?;
 
@@ -147,52 +149,50 @@ async fn validate_deal_internal(
         let submitted_proof_in_block_num = match provider
             .get_proof_block_num_from_window(deal_id, window_num as u64)
             .await
-            .map_err(|e| format!("Could not get block where proof was submitted for this window: {e}"))? {
+            .map_err(|e| {
+                format!("Could not get block where proof was submitted for this window: {e}")
+            })? {
             Some(block_num) => block_num,
             None => {
-                log!(Level::Info, "No proof submitted for window {}", window_num);
+                info!("No proof submitted for window {}", window_num);
                 continue;
             }
         };
 
         // TODO these should be rolled up into one function in eth_shared pls
-        let filter: Filter = Filter::new()
+        let filter = Filter::new()
             .select(submitted_proof_in_block_num.0)
             // TODO figure this guy out later :)
-            .address(deal_info.deal_contract_address)
+            .address(provider.contract.address())
             .topic1(H256::from_low_u64_be(deal_id.0));
 
-        let block_logs = provider
-            .get_logs_from_filter(&filter)
-            .await
-            .map_err(|e| format!("Couldn't get log from block {}: {}", submitted_proof_in_block_num.0, e))?;
+        let block_logs = provider.get_logs_from_filter(&filter).await.map_err(|e| {
+            format!(
+                "Couldn't get log from block {}: {}",
+                submitted_proof_in_block_num.0, e
+            )
+        })?;
 
         println!("LOGs {:?}", block_logs);
         // The first two 32 byte words of log data are a pointer and the size of the data.
         // TODO put this in banyan_shared!
         let data = &block_logs[0].data;
-        if data.length() < WORD * 2 {
+        if data.len() < WORD * 2 {
             return Err(format!("Data is too short: {:?}", data));
         }
-        let data_size = u64::from_be_bytes(&data[WORD..WORD * 2]);
-        if data.length() < WORD * 2 + data_size as usize {
-            return Err(format!("Data is too short: {:?}", data));
-        }
-        let data_bytes = &data[WORD * 2..WORD*2 + data_size as usize];
-        let proof_bytes = Cursor::new(data_bytes);
-        // step c. above
-        let target_window_start: BlockNum = window_size * window_num + deal_info.deal_start_block;
 
-        // step d. above
-        let target_block_hash = provider
-            .get_block_hash_from_num(target_window_start)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Could not get hash of block number {}: {}",
-                    target_window_start.0, e
-                )
-            })?;
+        // TODO yeah there's definitely a bug here. this slice is only 32 bytes long, not 64.
+        let data_size = u64::from_be_bytes({
+            let mut a = [0u8; 8];
+            a.clone_from_slice(&data[WORD..WORD * 2]);
+            a
+        });
+        if data.len() < WORD * 2 + data_size as usize {
+            return Err(format!("Data is too short: {:?}", data));
+        }
+
+        let data_bytes = &data[WORD * 2..WORD * 2 + data_size as usize];
+        let proof_bytes = Cursor::new(data_bytes);
 
         // step e. above
         let (chunk_offset, chunk_size) =
@@ -201,18 +201,19 @@ async fn validate_deal_internal(
         println!("target window: {}", target_window_start.0);
         println!("chunk offset val: {}", chunk_offset);
         // step f. above
-        let mut decoded = Vec::new();
-        let mut decoder = bao::decode::SliceDecoder::new(
+        if bao::decode::SliceDecoder::new(
             proof_bytes,
             &(deal_info.blake3_checksum),
             chunk_offset,
             chunk_size,
-        );
-
-        match decoder.read_to_end(&mut decoded) {
-            Ok(_res) => success_count += 1,
-            Err(_e) => println!("Error in decoding: {:?}", window_num),
-        };
+        )
+        .read_to_end(&mut vec![])
+        .is_ok()
+        {
+            success_count += 1
+        } else {
+            info!("Proof failed for window {}", window_num);
+        }
     }
     if num_windows > 0 {
         Ok(Json(MyResult {
