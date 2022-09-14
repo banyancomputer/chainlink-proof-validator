@@ -37,14 +37,6 @@ pub async fn compute_target_block_hash(target_window_start: BlockNum) -> Result<
     };
     Ok(target_block_hash)
 }
-pub fn hash_and_length_helper(
-    file: &str,
-) -> Result<(bao::Hash, u64), Error> {
-    let file_length = file_len(file) as u64;
-    let mut f = File::open(file)?;
-    let (_obao_file, hash) = proofs::gen_obao(&f).unwrap();
-    return Ok((hash, file_length));
-}
 
 /* Reads a local text file and finds the length of the file */
 pub fn file_len(file_name: &str) -> usize {
@@ -72,7 +64,6 @@ pub async fn create_proof_helper(
     let file_length = file_len(file) as u64;
     let (chunk_offset, chunk_size) =
         proofs::compute_random_block_choice_from_hash(target_block_hash, file_length);
-
     let mut f = File::open(file)?;
     let (obao_file, hash) = proofs::gen_obao(&f)?;
     f.rewind()?;
@@ -85,14 +76,12 @@ pub async fn create_proof_helper(
     if quality == Quality::Bad {
         let last_index = slice.len() - 1;
         slice[last_index] ^= 1;
-    }
-
+    } 
     let mut proof_file = File::create(format!(
-        "{}{}_proof_{:?}.txt",
-        target_dir, input_file_name, quality
+        "{}{}_proof_{:?}_{}.txt",
+        target_dir, input_file_name, quality, target_window_start.0.to_string()
     ))?;
     proof_file.write_all(&slice)?;
-
     Ok((hash, file_length))
 }
 
@@ -112,7 +101,7 @@ pub async fn create_bad_proof(
     create_proof_helper(target_window_start, file, Quality::Bad, target_dir).await
 }
 
-pub async fn create_proofs(
+pub async fn create_good_proofs(
     target_window_starts: &[BlockNum],
     input_dir: &str,
     target_dir: &str,
@@ -126,7 +115,7 @@ pub async fn create_proofs(
             None => return Err(anyhow!("Could not convert file name {:?} to string.", file)),
         };
         result.push(create_good_proof(*target_window_start, file, target_dir).await?);
-        result.push(create_bad_proof(*target_window_start, file, target_dir).await?);
+        result.push(create_good_proof(*target_window_start, file, target_dir).await?);
     }
     Ok(result)
 }
@@ -139,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
     let url = format!("{}{}", api_url, api_key);
     let contract_address =
         std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
-    let provider = VitalikProvider::new(url, contract_address, 1)?;
+    let provider = VitalikProvider::new(url, contract_address)?;
     let info = provider.get_onchain(DealID(55378008)).await?;
     println!("{:?}", info);
 
@@ -161,7 +150,9 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /*
     #[test]
+
     fn test_file_len() {
         let eth_len = file_len("ethereum.pdf");
         let filecoin_len = file_len("filecoin.pdf");
@@ -169,4 +160,5 @@ mod tests {
         assert_eq!(filecoin_len, 629050);
         //assert_eq!(File::open("files/ethereum.pdf")?.metadata().unwrap().len(), 941366);
     }
+    */
 }
