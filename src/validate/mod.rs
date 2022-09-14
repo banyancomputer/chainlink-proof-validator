@@ -33,13 +33,15 @@ codecov, cicd
 use anyhow::Result;
 use banyan_shared::{eth::VitalikProvider, proofs, proofs::window, types::*};
 use dotenv::dotenv;
-use ethers::types::{Filter, H256};
+use ethers::types::{Filter, H256, Bytes};
 use rocket::{
     post,
     serde::{json::Json, Deserialize, Serialize},
 };
 use std::io::{Cursor, Read, Seek};
+use hex_slice::AsHex;
 
+const WORD: usize = 32;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Status {
@@ -99,7 +101,6 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
     let provider = VitalikProvider::new(api_key, contract_address)
         .map_err(|e| format!("error with creating provider: {e}"))?;
 
-    println!("deal id: {}", deal_id.0);
     let deal_info = provider
         .get_onchain(deal_id)
         .await
@@ -144,13 +145,14 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
             .get_logs_from_filter(&filter)
             .await
             .map_err(|e| format!("Couldn't get logs from block {}: {}", block_num.0, e))?;
-        //let proof_bytes = Cursor::new(&block_logs[0].data);
-
+       
+        // The first two 32 byte words of log data are a pointer and the size of the data. 
         let data = &block_logs[0].data;
-        let data_size = data.get(32..64).unwrap();
-        println!("size: {:?}", data_size);
-        let end: usize = 1672 + 64;
-        let data_bytes = data.get(64..end).unwrap();
+        let data_size = data.get(WORD..(WORD*2)).unwrap();
+        let hex_data = hex::encode(data_size);
+        let size_int = usize::from_str_radix(&hex_data, 16).unwrap();
+        let end: usize = size_int + (WORD*2);
+        let data_bytes = data.get((WORD*2)..end).unwrap();
         let proof_bytes = Cursor::new(data_bytes);
 
         // step c. above
@@ -170,13 +172,9 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
         // step e. above
         let (chunk_offset, chunk_size) =
             proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
-        println!("file size: {}", deal_info.file_size);
+        
         println!("target window: {}", target_window_start.0);
         println!("chunk offset val: {}", chunk_offset);
-        println!("checksum: {}", deal_info.blake3_checksum);
-        //get length of proof_bytes
-        println!("proof size: {}", &block_logs[0].data.len());
-
         // step f. above
         let mut decoded = Vec::new();
         let mut decoder = bao::decode::SliceDecoder::new(
