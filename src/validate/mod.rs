@@ -39,7 +39,6 @@ use rocket::{
     serde::{json::Json, Deserialize, Serialize},
 };
 use std::io::{Cursor, Read, Seek};
-use hex_slice::AsHex;
 
 const WORD: usize = 32;
 
@@ -132,10 +131,19 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
     // iterating over proof blocks (by window)
     for window_num in 1..num_windows + 1 {
         // step b. above
+        println!("window_num: {}", window_num);
         let block_num = provider
             .get_block_num_from_window(deal_id, window_num as u64)
             .await
             .map_err(|e| format!("Could not get block: {e}"))?;
+
+        println!("block_num: {:?}", block_num);
+        /*
+        let block_num = match provider.get_block_num_from_window(deal_id, window_num as u64).await {
+            Ok(it) => it,
+            Err(e) => println!("Could not get block: {e}"),
+        };
+        */
 
         let filter: Filter = Filter::new()
             .select(block_num.0)
@@ -146,15 +154,18 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
             .await
             .map_err(|e| format!("Couldn't get logs from block {}: {}", block_num.0, e))?;
        
+        println!("LOGs {:?}", block_logs);
         // The first two 32 byte words of log data are a pointer and the size of the data. 
+        println!("error past here");
         let data = &block_logs[0].data;
         let data_size = data.get(WORD..(WORD*2)).unwrap();
+
         let hex_data = hex::encode(data_size);
         let size_int = usize::from_str_radix(&hex_data, 16).unwrap();
         let end: usize = size_int + (WORD*2);
         let data_bytes = data.get((WORD*2)..end).unwrap();
         let proof_bytes = Cursor::new(data_bytes);
-
+        println!("error not past here");
         // step c. above
         let target_window_start: BlockNum = window_size * window_num + deal_info.deal_start_block;
 
