@@ -2,8 +2,6 @@
 .env
 node_modules
 
-node_modules
-.env
 Cargo.lock
 coverage
 coverage.json
