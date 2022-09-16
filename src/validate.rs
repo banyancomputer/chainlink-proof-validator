@@ -38,7 +38,7 @@ use rocket::{
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
-use std::io::{Cursor, Read};
+use std::io::{Cursor};
 use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

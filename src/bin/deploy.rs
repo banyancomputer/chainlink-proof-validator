@@ -53,7 +53,7 @@ pub async fn deploy_helper(
 // proof helper
 pub async fn proof_helper(
     client: SignerMiddleware<Provider<ethers::providers::Http>, LocalWallet>,
-    contract: Contract<ethers::providers::Provider<ethers::providers::Http>>,
+    contract: Contract<Provider<Http>>,
     file_name: &str,
     offer_id: u64,
     target_block: u64,
@@ -108,7 +108,7 @@ pub fn setup() -> Result<
     Ok((provider, client, contract))
 }
 
-pub async fn api_call(offer_id: u64, api_url: String) -> Result<u64, anyhow::Error> {
+pub async fn rust_chainlink_ea_api_call(offer_id: u64, api_url: String) -> Result<u64, anyhow::Error> {
     // Job id when chainlink calls is not random.
     let mut rng = rand::thread_rng();
     let random_job_id: u16 = rng.gen();
@@ -134,14 +134,6 @@ pub async fn api_call(offer_id: u64, api_url: String) -> Result<u64, anyhow::Err
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
-    /*
-    let _th = deploy_helper().await?;
-    let _ph = proof_helper().await?;
-    */
-    //let (provider, client, contract) = setup()?;
-    //let _th = deploy_helper(client.clone(), contract.clone(), 2u64, 1u64, 2u64, 3u64, 4u64, "praying".to_string()).await?;
-    //let file_name = "/Users/jonahkaye/Desktop/Banyan/Rust-Chainlink-EA-API/proofs/ethereum_proof_Good.txt";
-    //let _ph = proof_helper(client, contract, file_name, 2u64, 1u64).await?;
     Ok(())
 }
 
@@ -151,136 +143,13 @@ mod tests {
 
     use anyhow::{anyhow, Error};
     use banyan_shared::{eth::VitalikProvider, proofs, types::*};
+
     use std::{
         fs::{read_dir, File},
         io::{Cursor, Read, Seek, Write},
     };
-
-    #[derive(Eq, PartialEq, Debug)]
-    pub enum Quality {
-        Good,
-        Bad,
-    }
-
-    // Implement integration_testing_logic here, just without a time delay. Intend to separate the two proofs by
-    // the size of the window. In the integration testing, do the same calculation for the first target_window,
-    // create the deal, log the first proof, add the size of the window, and wait until the current_window is fast
-    // forwarded by size of the window, and log the second proof.
-    //
-    // Concurrently, calculate the two target windows, and then the folders will be created with the files by rust.
-    // Ethereum blocks change every 12 seconds so this should world fine. Maybe put the two commands in a bash script.
-
-    /* Reads a local text file and finds the length of the file */
-    pub fn file_len(file_name: &str) -> usize {
-        let mut file_content = Vec::new();
-        let mut file = File::open(&file_name).expect("Unable to open file");
-        file.read_to_end(&mut file_content).expect("Unable to read");
-        let length = file_content.len();
-        length
-    }
-
-    pub async fn create_proof_helper(
-        eth_client: &VitalikProvider,
-        target_window_start: BlockNum,
-        file: &str,
-        quality: Quality,
-        target_dir: &str,
-    ) -> Result<(bao::Hash, u64), Error> {
-        std::fs::create_dir_all("proofs/")?;
-
-        let target_block_hash = eth_client
-            .get_block_hash_from_num(target_window_start)
-            .await?;
-
-        // file stuff
-        let split = file.split('.').collect::<Vec<&str>>();
-        let input_file_path = split[2];
-        let input_file_name = input_file_path.split('/').next_back().unwrap();
-
-        let file_length = file_len(file) as u64;
-        let (chunk_offset, chunk_size) =
-            proofs::compute_random_block_choice_from_hash(target_block_hash, file_length);
-        let mut f = File::open(file)?;
-        let (obao_file, hash) = proofs::gen_obao(&f)?;
-        f.rewind()?;
-        let cursor = Cursor::new(obao_file);
-        let mut extractor =
-            bao::encode::SliceExtractor::new_outboard(f, cursor, chunk_offset, chunk_size);
-        let mut slice = Vec::new();
-        extractor.read_to_end(&mut slice)?;
-
-        if quality == Quality::Bad {
-            let last_index = slice.len() - 1;
-            slice[last_index] ^= 1;
-        }
-
-        // TODO pass this through memory.....
-        let mut proof_file = File::create(format!(
-            "{}{}_proof_{:?}_{}.txt",
-            target_dir,
-            input_file_name,
-            quality,
-            target_window_start.0.to_string()
-        ))?;
-        proof_file.write_all(&slice)?;
-        Ok((hash, file_length))
-    }
-
-    pub async fn create_good_proofs(
-        target_window_starts: &[BlockNum],
-        input_dir: &str,
-        target_dir: &str,
-    ) -> Result<Vec<(bao::Hash, u64)>, Error> {
-        let mut result: Vec<(bao::Hash, u64)> = Vec::new();
-        let paths = read_dir(input_dir)?;
-
-        // make a vitalikprovider
-        let eth_client = VitalikProvider::new();
-        for (target_window_start, file) in target_window_starts.iter().zip(paths) {
-            let file = file?.path();
-            let file: &str = match file.to_str() {
-                Some(f) => f,
-                None => return Err(anyhow!("Could not convert file name {:?} to string.", file)),
-            };
-            result.push(
-                create_proof_helper(
-                    eth_client,
-                    *target_window_start,
-                    file,
-                    Quality::Good,
-                    target_dir,
-                )
-                .await?,
-            );
-            result.push(
-                create_proof_helper(
-                    eth_client,
-                    *target_window_start,
-                    file,
-                    Quality::Good,
-                    target_dir,
-                )
-                .await?,
-            );
-        }
-        Ok(result)
-    }
-
-    // TODO add tests to check that good proof is good and bad proof is bad
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        #[test]
-        fn test_file_len() {
-            let eth_len = file_len("ethereum.pdf");
-            let filecoin_len = file_len("filecoin.pdf");
-            assert_eq!(eth_len, 941366);
-            assert_eq!(filecoin_len, 629050);
-            //assert_eq!(File::open("files/ethereum.pdf")?.metadata().unwrap().len(), 941366);
-        }
-    }
-
-    //use super::*;
+    use super::*;
+    use serde_json::json;
     //use std::{thread, time};
     //use bao;
     /*
@@ -394,43 +263,30 @@ mod tests {
         Ok(())
     }
     */
+    
     #[tokio::test]
     async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
         let (provider, client, contract) = setup().unwrap();
+        let provider = VitalikProvider::new_from_provider_contract(provider, contract)?;
+
         let offer_id = 67;
         let deal_length_in_blocks: u64 = 10;
         let proof_frequency_in_blocks: u64 = 5;
         let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE";
-        let latest_block: u64 = provider.get_block_number().await?.as_u64();
-        let mut diff: u64 = latest_block % proof_frequency_in_blocks;
-        if diff == 0 {
-            diff = proof_frequency_in_blocks;
-        }
-        let mut target_block: u64 = latest_block - diff;
-        let deal_start_block: u64 = target_block - proof_frequency_in_blocks;
-        assert!(
-            target_block >= deal_start_block,
-            "target_block must be greater than deal_start_block"
-        );
-        let offset: u64 = target_block - deal_start_block;
-        assert!(offset < deal_length_in_blocks);
-        assert_eq!(offset % proof_frequency_in_blocks, 0);
-        let window_num = offset / proof_frequency_in_blocks;
-        println!("window_num: {:}", window_num);
+
+        let (deal_start_block, target_block) = provider.generate_test_deal_parameters(proof_frequency_in_blocks).await?;
         let file_name = "../Rust-Chainlink-EA-API/files/ethereum.pdf";
-        let target_dir = "../Rust-Chainlink-EA-API/proofs/";
-        let target_block = target_block; //(proof_frequency_in_blocks * i);
-        let (hash, file_length): (bao::Hash, u64) = create_proof_helper(
-            provider.clone(),
+        
+        let (hash, file_length, _proof): (bao::Hash, u64, Vec<u8>) = VitalikProvider::create_proof_helper(
+            provider,
             BlockNum(target_block),
             file_name,
-            Quality::Good,
-            target_dir,
-        )
-        .await?;
+            true,
+        ).await?;
+
         let _dh = deploy_helper(
             client.clone(),
-            contract.clone(),
+            provider.contract.clone(),
             offer_id,
             deal_start_block,
             deal_length_in_blocks,
@@ -442,8 +298,9 @@ mod tests {
         .await?;
 
         let success_count: u64 =
-            api_call(offer_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+            rust_chainlink_ea_api_call(offer_id, "http://127.0.0.1:8000/validate".to_string()).await?;
         assert_eq!(success_count, 0);
         Ok(())
     }
+
 }
