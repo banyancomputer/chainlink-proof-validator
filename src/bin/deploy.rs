@@ -14,6 +14,9 @@ use serde_json::json;
 use std::fs;
 use std::{fs::File, io::Read};
 
+use banyan_shared::types::DealID;
+
+
 pub async fn deploy_helper(
     client: SignerMiddleware<Provider<ethers::providers::Http>, LocalWallet>,
     contract: Contract<ethers::providers::Provider<ethers::providers::Http>>,
@@ -108,7 +111,7 @@ pub fn setup() -> Result<
     Ok((provider, client, contract))
 }
 
-pub async fn rust_chainlink_ea_api_call(offer_id: u64, api_url: String) -> Result<u64, anyhow::Error> {
+pub async fn rust_chainlink_ea_api_call(deal_id: DealID, api_url: String) -> Result<u64, anyhow::Error> {
     // Job id when chainlink calls is not random.
     let mut rng = rand::thread_rng();
     let random_job_id: u16 = rng.gen();
@@ -116,7 +119,7 @@ pub async fn rust_chainlink_ea_api_call(offer_id: u64, api_url: String) -> Resul
         "job_run_id": random_job_id.to_string(),
         "data":
         {
-             "deal_id": offer_id
+             "deal_id": deal_id.0
         }
     });
     let client = reqwest::Client::new();
@@ -140,19 +143,108 @@ async fn main() -> Result<(), anyhow::Error> {
 //testing
 #[cfg(test)]
 mod tests {
-
-    use anyhow::{anyhow, Error};
-    use banyan_shared::{eth::VitalikProvider, proofs, types::*};
-
-    use std::{
-        fs::{read_dir, File},
-        io::{Cursor, Read, Seek, Write},
-    };
+    use banyan_shared::{eth::{EthClient}, types::{DealID, BlockNum, DealProposal}};
+    use ethers::prelude::k256::sha2::digest::block_buffer::Block;
     use super::*;
-    use serde_json::json;
-    //use std::{thread, time};
-    //use bao;
+
+    #[tokio::test]
+    async fn api_call_test() -> Result<(), anyhow::Error>
+    {
+        let success_count: u64 = rust_chainlink_ea_api_call(DealID(1), "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count, 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
+
+        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let eth_client = EthClient::default();
+
+        let deal_id: DealID = eth_client
+            .propose_deal(deal_proposal, None, None)
+            .await
+            .expect("Failed to send deal proposal");
+
+        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        // Assert that the deal we read is the same as the one we sent
+        assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
+
+        let success_count: u64 =
+            rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn api_one_proofs_test() -> Result<(), anyhow::Error> {
+
+        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let eth_client = EthClient::default();
+
+        let deal_id: DealID = eth_client
+            .propose_deal(deal_proposal, None, None)
+            .await
+            .expect("Failed to send deal proposal");
+
+        // TO DO make proof
+        let block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof)
+            .await
+            .expect("Failed to post proof");
+    
+        let success_count: u64 =
+            rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count, 0);
+        Ok(())
+    }
     /*
+    #[tokio::test]
+    async fn one_proof_window_missing () -> Result<(), anyhow::Error>
+    {
+        let (provider, client, contract) = setup().unwrap();
+        let offer_id = 100;
+        let deal_length_in_blocks: u64 = 10;
+        let proof_frequency_in_blocks: u64 = 5;
+        let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE";
+        let latest_block: u64 = provider.get_block_number().await?.as_u64();
+        let mut diff: u64 = latest_block % proof_frequency_in_blocks;
+        if diff == 0
+        {
+            diff = proof_frequency_in_blocks;
+        }
+        let mut target_block: u64 = latest_block - diff;
+        let deal_start_block: u64 = target_block - proof_frequency_in_blocks;
+        assert!(target_block >= deal_start_block, "target_block must be greater than deal_start_block");
+        let offset: u64 = target_block - deal_start_block;
+        assert!(offset < deal_length_in_blocks);
+        assert!(offset % proof_frequency_in_blocks == 0);
+        let window_num = offset/proof_frequency_in_blocks;
+        println!("window_num: {:}", window_num);
+
+        let file_name = "../Rust-Chainlink-EA-API/files/ethereum.pdf";
+        let target_dir = "../Rust-Chainlink-EA-API/proofs/";
+
+        let target_block = target_block; //(proof_frequency_in_blocks * i);
+        let (hash, file_length): (bao::Hash, u64) = make_test::create_good_proof(banyan_shared::types::BlockNum(target_block), file_name, target_dir).await?;
+
+            let _dh = deploy_helper(client.clone(), contract.clone(), offer_id, deal_start_block, deal_length_in_blocks, proof_frequency_in_blocks, ipfs_file_cid.to_string(), file_length, hash.to_string()).await?;
+
+        let proof_file = format!(
+            "../Rust-Chainlink-EA-API/proofs/ethereum_proof_Good_{}.txt",
+            target_block.to_string()
+        );
+        let _ph: () = proof_helper(client.clone(), contract.clone(), &proof_file, offer_id, window_num).await?;
+
+        let success_count  = api_call(offer_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count, 1);
+        Ok(())
+    }
+    */
+
+     /*
     #[tokio::test]
     async fn verify_ten_correct_proofs() -> Result<(), anyhow::Error>
     {
@@ -210,97 +302,5 @@ mod tests {
     }
 
     */
-
-    /*
-    #[tokio::test]
-    async fn one_proof_window_missing () -> Result<(), anyhow::Error>
-    {
-        let (provider, client, contract) = setup().unwrap();
-        let offer_id = 100;
-        let deal_length_in_blocks: u64 = 10;
-        let proof_frequency_in_blocks: u64 = 5;
-        let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE";
-        let latest_block: u64 = provider.get_block_number().await?.as_u64();
-        let mut diff: u64 = latest_block % proof_frequency_in_blocks;
-        if diff == 0
-        {
-            diff = proof_frequency_in_blocks;
-        }
-        let mut target_block: u64 = latest_block - diff;
-        let deal_start_block: u64 = target_block - proof_frequency_in_blocks;
-        assert!(target_block >= deal_start_block, "target_block must be greater than deal_start_block");
-        let offset: u64 = target_block - deal_start_block;
-        assert!(offset < deal_length_in_blocks);
-        assert!(offset % proof_frequency_in_blocks == 0);
-        let window_num = offset/proof_frequency_in_blocks;
-        println!("window_num: {:}", window_num);
-
-        let file_name = "../Rust-Chainlink-EA-API/files/ethereum.pdf";
-        let target_dir = "../Rust-Chainlink-EA-API/proofs/";
-
-        let target_block = target_block; //(proof_frequency_in_blocks * i);
-        let (hash, file_length): (bao::Hash, u64) = make_test::create_good_proof(banyan_shared::types::BlockNum(target_block), file_name, target_dir).await?;
-
-            let _dh = deploy_helper(client.clone(), contract.clone(), offer_id, deal_start_block, deal_length_in_blocks, proof_frequency_in_blocks, ipfs_file_cid.to_string(), file_length, hash.to_string()).await?;
-
-        let proof_file = format!(
-            "../Rust-Chainlink-EA-API/proofs/ethereum_proof_Good_{}.txt",
-            target_block.to_string()
-        );
-        let _ph: () = proof_helper(client.clone(), contract.clone(), &proof_file, offer_id, window_num).await?;
-
-        let success_count  = api_call(offer_id, "http://127.0.0.1:8000/validate".to_string()).await?;
-        assert_eq!(success_count, 1);
-        Ok(())
-    }
-    */
-    /*
-    #[tokio::test]
-    async fn api_call_test() -> Result<(), anyhow::Error>
-    {
-        let success_count: u64 = api_call(1, "http://127.0.0.1:8000/validate".to_string()).await?;
-        assert_eq!(success_count, 1);
-        Ok(())
-    }
-    */
-    
-    #[tokio::test]
-    async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
-        let (provider, client, contract) = setup().unwrap();
-        let provider = VitalikProvider::new_from_provider_contract(provider, contract)?;
-
-        let offer_id = 67;
-        let deal_length_in_blocks: u64 = 10;
-        let proof_frequency_in_blocks: u64 = 5;
-        let ipfs_file_cid = "Qmd63gzHfXCsJepsdTLd4cqigFa7SuCAeH6smsVoHovdbE";
-
-        let (deal_start_block, target_block) = provider.generate_test_deal_parameters(proof_frequency_in_blocks).await?;
-        let file_name = "../Rust-Chainlink-EA-API/files/ethereum.pdf";
-        
-        let (hash, file_length, _proof): (bao::Hash, u64, Vec<u8>) = VitalikProvider::create_proof_helper(
-            provider,
-            BlockNum(target_block),
-            file_name,
-            true,
-        ).await?;
-
-        let _dh = deploy_helper(
-            client.clone(),
-            provider.contract.clone(),
-            offer_id,
-            deal_start_block,
-            deal_length_in_blocks,
-            proof_frequency_in_blocks,
-            ipfs_file_cid.to_string(),
-            file_length,
-            hash.to_string(),
-        )
-        .await?;
-
-        let success_count: u64 =
-            rust_chainlink_ea_api_call(offer_id, "http://127.0.0.1:8000/validate".to_string()).await?;
-        assert_eq!(success_count, 0);
-        Ok(())
-    }
 
 }

@@ -13,22 +13,34 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         setChainlinkOracle(0xF1a252307Ff9F3fbB9598c9a181385122948b8Ae);
         fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
     }
+    
+    enum OfferStatus { NON, OFFER_CREATED, OFFER_ACCEPTED, OFFER_ACTIVE, OFFER_COMPLETED, OFFER_FINALIZED, OFFER_TIMEDOUT, OFFER_CANCELLED }
 
-    uint256 private offerId;
+
+    struct OfferCounterpart {
+        uint256 amount;
+        address partyAddress;
+        bool cancel;
+    }
+    uint256 private _offerId;
     struct Deal {
-        uint256 offerId;
-        uint256 deal_start_block;
-        uint256 deal_length_in_blocks;
-        uint256 proof_frequency_in_blocks;
+        uint256 dealStartBlock;
+        uint256 dealLengthInBlocks;
+        uint256 proofFrequencyInBlocks;
         uint256 price;
         uint256 collateral;
-        address erc20_token_denomination;
-        string ipfs_file_cid; 
-        uint256 file_size;
-        string blake3_checksum;
+        address erc20TokenDenomination;
+        string ipfsFileCID; 
+        uint256 fileSize;
+        string blake3Checksum;
+        OfferCounterpart creatorCounterpart;
+        OfferCounterpart providerCounterpart;
+        OfferStatus offerStatus;
     }
-    mapping(uint256 => Deal) public deals;
-    mapping (uint256 => mapping (uint256 => uint256)) public proofblocks;
+    
+    mapping(uint256 => Deal) public _deals;
+    mapping(uint256 => mapping (uint256 => uint256)) public _proofblocks; // offerID => (proofWindowCount => block.number)
+    mapping(address => uint256[]) internal _openOffers;
 
     struct ResponseData {
         uint256 offer_id;
@@ -41,54 +53,88 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
 
     event RequestVerification(bytes32 indexed requestId, uint256 offerId);
     event ProofAdded(uint256 indexed offerId, uint256 indexed blockNumber, bytes proof);
+    event NewOffer(address indexed creator, address indexed provider, uint256 offerId);
 
-    function createOffer (Deal calldata _deal) public {
-        deals[_deal.offerId] = _deal;
-    }
+    function startOffer(address providerAddress, uint256 dealLength, uint256 proofFrequency, uint256 bounty, uint256 collateral, address token, uint256 fileSize, string calldata cid, string calldata blake3) public payable returns(uint256)
+    {
 
-    function createOfferShallow (uint256 _offerId, uint256 _deal_start_block, uint256 _deal_length_in_blocks, uint256 _proof_frequency_in_blocks, uint256 _file_size, string calldata _blake3_checksum) public {
-        Deal memory deal = Deal(_offerId, _deal_start_block, _deal_length_in_blocks, _proof_frequency_in_blocks, 0, 0, address(0), "", _file_size, _blake3_checksum);
-        deals[_offerId] = deal;
-    }
+        _offerId++;
+        _deals[_offerId].dealStartBlock = block.number;
+        _deals[_offerId].dealLengthInBlocks = dealLength;
+        _deals[_offerId].proofFrequencyInBlocks = proofFrequency;
+        _deals[_offerId].price = bounty;
+        _deals[_offerId].collateral = collateral;
+        _deals[_offerId].erc20TokenDenomination = token;
+        _deals[_offerId].fileSize = fileSize;
+        _deals[_offerId].ipfsFileCID = cid;
+        _deals[_offerId].blake3Checksum = blake3;
+        _deals[_offerId].creatorCounterpart.partyAddress = msg.sender;
+        _deals[_offerId].providerCounterpart.partyAddress = providerAddress;
 
-    function getDeal(uint256 _offerId) public view returns (Deal memory) {
-        return deals[_offerId];
+        _deals[_offerId].creatorCounterpart.amount = bounty;
+        
+        _deals[_offerId].offerStatus = OfferStatus.OFFER_CREATED;
+        _openOffers[msg.sender].push(_offerId);
+
+        emit NewOffer(msg.sender, providerAddress, _offerId );
+        return _offerId;
     }
-    function getDealStartBlock(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].deal_start_block;
+    function getDeal(uint256 offerID) public view returns (Deal memory) {
+            return _deals[offerID];
+        }
+        
+    function getDealStartBlock(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].dealStartBlock;
     }
-    function getDealLengthInBlocks(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].deal_length_in_blocks;
+    function getDealStatus(uint256 _dealId) public view returns (uint8) {
+        return uint8(_deals[_dealId].offerStatus);
     }
-    function getProofFrequencyInBlocks(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].proof_frequency_in_blocks;
+    function getDealLengthInBlocks(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].dealLengthInBlocks;
     }
-    function getPrice(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].price;
+    function getProofFrequencyInBlocks(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].proofFrequencyInBlocks;
     }
-    function getCollateral(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].collateral;
+    function getPrice(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].price;
     }
-    function getErc20TokenDenomination(uint256 _offerId) public view returns (address) {
-        return deals[_offerId].erc20_token_denomination;
+    function getCollateral(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].collateral;
     }
-    function getIpfsFileCid(uint256 _offerId) public view returns (string memory) {
-        return deals[_offerId].ipfs_file_cid;
+    function getErc20TokenDenomination(uint256 offerID) public view returns (address) {
+        return _deals[offerID].erc20TokenDenomination;
     }
-    function getFileSize(uint256 _offerId) public view returns (uint256) {
-        return deals[_offerId].file_size;
+    function getIpfsFileCid(uint256 offerID) public view returns (string memory) {
+        return _deals[offerID].ipfsFileCID;
     }
-    function getBlake3Checksum(uint256 _offerId) public view returns (string memory) {
-        return deals[_offerId].blake3_checksum;
+    function getFileSize(uint256 offerID) public view returns (uint256) {
+        return _deals[offerID].fileSize;
     }
-    function getProofBlock(uint256 _offerId, uint256 window_num) public view returns (uint256) {
-        return proofblocks[_offerId][window_num]; 
+    function getBlake3Checksum(uint256 offerID) public view returns (string memory) {
+        return _deals[offerID].blake3Checksum;
+    }
+    function getProofBlock(uint256 offerID, uint256 windowNum) public view returns (uint256) {
+        return _proofblocks[offerID][windowNum]; 
+    }
+    // get the block numbers of all proofs sent for a specific offer
+    function getProofBlockNumbers(uint256 offerId) public view returns(uint256) {
+        return _deals[offerId].dealLengthInBlocks;
     }
 
     // ISSUE OF block.number in proofs not being the same as the block number the event is emitted to?
-    function save_proof (bytes calldata _proof, uint256 _offerId, uint256 target_window) public {
-        proofblocks[_offerId][target_window] = block.number;
-        emit ProofAdded(_offerId, block.number, _proof);
+    function saveProof(bytes calldata _proof, uint256 offerId) public {
+        require(_proof.length > 0, "No proof provided"); // check if proof is empty
+        require(_deals[offerId].offerStatus == OfferStatus.OFFER_CREATED, "ERROR: OFFER_NOT_ACTIVE");
+        require(block.number < _deals[offerId].dealStartBlock + _deals[offerId].dealLengthInBlocks && block.number > _deals[offerId].dealStartBlock, "Out of block timerange");
+
+        uint256 offset = block.number - _deals[offerId].dealStartBlock;
+        require(offset < _deals[offerId].dealLengthInBlocks, "Proof window is over"); // Potentially remove this revert as it is redundant with the above require.
+
+        uint256 proofWindowNumber = offset / _deals[offerId].proofFrequencyInBlocks; // Proofs submit as entries within a range.
+        require(_proofblocks[offerId][proofWindowNumber] != 0, "Proof already submitted");
+
+        _proofblocks[offerId][proofWindowNumber] = block.number;
+        emit ProofAdded(offerId, _proofblocks[offerId][proofWindowNumber], _proof);
     }
 
     //  PART 2 j

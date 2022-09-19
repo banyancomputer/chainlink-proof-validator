@@ -31,7 +31,7 @@ cargo build --release for benchmarking
 // TODO codecov, cicd
 */
 use anyhow::Result;
-use banyan_shared::{eth::VitalikProvider, proofs, proofs::window, types::*};
+use banyan_shared::{eth::EthClient, proofs, proofs::window, types::*};
 use log::info;
 use rocket::{
     post,
@@ -71,7 +71,7 @@ pub struct MyResult {
     pub status: Status,
     pub result: String,
 }
-pub struct WebserverState(pub Arc<VitalikProvider>);
+pub struct WebserverState(pub Arc<EthClient>);
 
 /* Function to construct an error response to return to Chainlink */
 fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
@@ -96,13 +96,13 @@ fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
 /// or an error message to be turned into Json<MyResult> in the caller!
 /// TODO fix logging... :|
 async fn validate_deal_internal(
-    provider: Arc<VitalikProvider>,
+    provider: Arc<EthClient>,
     deal_id: DealID,
 ) -> Result<Json<MyResult>, String> {
     let deal_info = provider
-        .get_onchain(deal_id)
+        .get_deal(deal_id)
         .await
-        .map_err(|e| format!("Error in get_onchain: {:?}", e))?;
+        .map_err(|e| format!("Error in get_deal: {:?}", e))?;
 
     // checking that deal is either finished or cancelled
     let current_block_num = provider
@@ -132,7 +132,7 @@ async fn validate_deal_internal(
     // iterating over proof blocks (by window)
     let mut success_count = 0;
     for window_num in 0..num_windows {
-        let target_window_start = VitalikProvider::compute_target_window_start(
+        let target_window_start = EthClient::compute_target_window_start(
             deal_info.deal_start_block,
             deal_info.proof_frequency_in_blocks,
             window_num,
@@ -173,12 +173,12 @@ async fn validate_deal_internal(
         };
 
         let (chunk_offset, chunk_size) =
-            proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size);
+            proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size.as_u64());
 
         // TODO is there an issue of coercing the Vec<u8> into a &[u8] here?
-        match VitalikProvider::check_if_merkle_proof_is_valid(
+        match EthClient::check_if_merkle_proof_is_valid(
             Cursor::new(&proof_bytes),
-            deal_info.blake3_checksum,
+            deal_info.blake3_checksum.hash(),
             chunk_offset,
             chunk_size,
         )
