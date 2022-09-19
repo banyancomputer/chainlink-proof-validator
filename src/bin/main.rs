@@ -1,3 +1,5 @@
+#![deny(unused_crate_dependencies)]
+
 #[macro_use]
 extern crate rocket;
 extern crate rust_chainlink_ea_api;
