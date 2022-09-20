@@ -151,7 +151,7 @@ mod tests {
     async fn api_call_test() -> Result<(), anyhow::Error>
     {
         let success_count: u64 = rust_chainlink_ea_api_call(DealID(1), "http://127.0.0.1:8000/validate".to_string()).await?;
-        assert_eq!(success_count, 1);
+        assert_eq!(success_count, 0);
         Ok(())
     }
 
@@ -180,7 +180,7 @@ mod tests {
     #[tokio::test]
     async fn api_one_proofs_test() -> Result<(), anyhow::Error> {
 
-        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
         let deal_proposal = DealProposal::builder().build(&file).unwrap();
         let eth_client = EthClient::default();
 
@@ -189,15 +189,30 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        // TO DO make proof
-        let block_num: BlockNum = eth_client
-            .post_proof(deal_id, proof)
+        let deal = eth_client.get_deal(deal_id).await.unwrap();
+     
+        let target_window: usize = eth_client
+            .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks, deal.deal_length_in_blocks)
+            .await
+            .expect("Failed to compute target window");
+    
+        let target_block = EthClient::compute_target_block_start(deal.deal_start_block, deal.proof_frequency_in_blocks, target_window);
+
+        // create a proof using the same file we used to create the deal
+        let (_hash, proof) = eth_client
+            .create_proof_helper(target_block, &mut file, deal.file_size.as_u64(), true)
+            .await
+            .expect("Failed to create proof");
+
+        let _block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof,None, None)
             .await
             .expect("Failed to post proof");
     
         let success_count: u64 =
             rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
-        assert_eq!(success_count, 0);
+
+        assert_eq!(success_count, 1);
         Ok(())
     }
     /*

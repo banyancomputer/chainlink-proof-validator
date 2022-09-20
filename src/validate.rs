@@ -132,7 +132,7 @@ async fn validate_deal_internal(
     // iterating over proof blocks (by window)
     let mut success_count = 0;
     for window_num in 0..num_windows {
-        let target_window_start = EthClient::compute_target_window_start(
+        let target_window_start = EthClient::compute_target_block_start(
             deal_info.deal_start_block,
             deal_info.proof_frequency_in_blocks,
             window_num,
