@@ -2,114 +2,11 @@ use rand::Rng;
 use rust_chainlink_ea_api::validate::MyResult;
 
 use dotenv::dotenv;
-use ethers::{
-    abi::Abi,
-    contract::Contract,
-    middleware::SignerMiddleware,
-    providers::{Http, Middleware, Provider},
-    signers::{LocalWallet, Signer},
-    types::{Address, Bytes, TransactionRequest},
-};
 use serde_json::json;
 use std::fs;
 use std::{fs::File, io::Read};
 
 use banyan_shared::types::DealID;
-
-
-pub async fn deploy_helper(
-    client: SignerMiddleware<Provider<ethers::providers::Http>, LocalWallet>,
-    contract: Contract<ethers::providers::Provider<ethers::providers::Http>>,
-    offer_id: u64,
-    deal_start_block: u64,
-    deal_length_in_blocks: u64,
-    proof_frequency_in_blocks: u64,
-    ipfs_file_cid: String,
-    file_size: u64,
-    blake3_checksum: String,
-) -> Result<(), anyhow::Error> {
-    println!("running deploy helper");
-    let name = "createOfferShallow";
-    let args = (
-        offer_id,
-        deal_start_block,
-        deal_length_in_blocks,
-        proof_frequency_in_blocks,
-        ipfs_file_cid,
-        file_size,
-        blake3_checksum,
-    );
-    let data = contract.encode(name, args).unwrap();
-    let transaction = TransactionRequest::new()
-        .to(contract.address())
-        .data(data)
-        .gas(10000000)
-        .chain_id(5);
-    let pending_tx = client.send_transaction(transaction, None).await?;
-    println!("offer sent");
-    let _receipt = pending_tx.confirmations(1).await?;
-    //println!("{:?}", receipt);
-    println!("offer made successfully");
-    Ok(())
-}
-
-// proof helper
-pub async fn proof_helper(
-    client: SignerMiddleware<Provider<ethers::providers::Http>, LocalWallet>,
-    contract: Contract<Provider<Http>>,
-    file_name: &str,
-    offer_id: u64,
-    target_block: u64,
-) -> Result<(), anyhow::Error> {
-    let name = "save_proof";
-    println!("running proof helper");
-    let mut file_content = Vec::new();
-    let mut file = File::open(&file_name).expect("Unable to open file");
-    file.read_to_end(&mut file_content).expect("Unable to read");
-
-    // println!("proof length: {:?}", file_content.len());
-
-    let args = (Bytes::from(file_content), offer_id, target_block);
-    let data = contract.encode(name, args).unwrap();
-    let transaction = TransactionRequest::new()
-        .to(contract.address())
-        .data(data)
-        .gas(10000000)
-        .chain_id(5);
-    let pending_tx = client.send_transaction(transaction, None).await?;
-    println!("Proof for {:?} sent successfully", file_name);
-    let _receipt = pending_tx.confirmations(1).await?;
-    //println!("{:?}", receipt);
-    Ok(())
-}
-
-pub fn setup() -> Result<
-    (
-        Provider<ethers::providers::Http>,
-        SignerMiddleware<Provider<ethers::providers::Http>, LocalWallet>,
-        Contract<ethers::providers::Provider<ethers::providers::Http>>,
-    ),
-    anyhow::Error,
-> {
-    dotenv().ok();
-    let api_key: String = std::env::var("API_KEY").expect("API_KEY must be set.");
-    let private_key: String = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY must be set.");
-    let provider =
-        Provider::<Http>::try_from(api_key).expect("could not instantiate HTTP Provider");
-    let address = std::env::var("CONTRACT_ADDRESS")
-        .expect("CONTRACT_ADDRESS must be set.")
-        .parse::<Address>()?; // old addr
-    let abi: Abi = serde_json::from_str(
-        fs::read_to_string("test_contract_abi.json")
-            .expect("can't read file")
-            .as_str(),
-    )?;
-    let wallet: LocalWallet = private_key.parse::<LocalWallet>()?;
-    let wallet = wallet.with_chain_id(5u64);
-    let client = SignerMiddleware::new(provider.clone(), wallet);
-    let contract = Contract::new(address, abi, provider.clone());
-    Ok((provider, client, contract))
-}
 
 pub async fn rust_chainlink_ea_api_call(deal_id: DealID, api_url: String) -> Result<u64, anyhow::Error> {
     // Job id when chainlink calls is not random.
@@ -130,7 +27,7 @@ pub async fn rust_chainlink_ea_api_call(deal_id: DealID, api_url: String) -> Res
         .await?
         .json::<MyResult>()
         .await?;
-    println!("{:?}", res);
+    dbg!("{:?}", &res);
     Ok(res.data.success_count)
 }
 
@@ -144,7 +41,6 @@ async fn main() -> Result<(), anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use banyan_shared::{eth::{EthClient}, types::{DealID, BlockNum, DealProposal}};
-    use ethers::prelude::k256::sha2::digest::block_buffer::Block;
     use super::*;
 
     #[tokio::test]
@@ -167,6 +63,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
+        dbg!("Proof Created for Deal ID: {:}", &deal_id);
         let deal = eth_client.get_deal(deal_id).await.unwrap();
         // Assert that the deal we read is the same as the one we sent
         assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
@@ -178,9 +75,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multiple_deals_same_file_no_proofs() -> Result<(), anyhow::Error> {
+
+        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let eth_client = EthClient::default();
+
+        let deal_id: DealID = eth_client
+            .propose_deal(deal_proposal.clone(), None, None)
+            .await
+            .expect("Failed to send deal proposal");
+
+        dbg!("Proof Created for Deal ID: {:}", &deal_id);
+        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        // Assert that the deal we read is the same as the one we sent
+        assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
+
+        let deal_id_2: DealID = eth_client
+            .propose_deal(deal_proposal, None, None)
+            .await
+            .expect("Failed to send deal proposal");
+        dbg!("Proof Created for Deal ID: {:}", &deal_id_2);
+        let deal = eth_client.get_deal(deal_id_2).await.unwrap();
+        assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
+
+        let success_count: u64 = rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count, 0);
+        let success_count_2: u64 = rust_chainlink_ea_api_call(deal_id_2, "http://127.0.0.1:8000/validate".to_string()).await?;
+        assert_eq!(success_count_2, 0);
+        Ok(())
+    }
+
+    
+   /*  #[tokio::test]
     async fn api_one_proofs_test() -> Result<(), anyhow::Error> {
 
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/filecoin.pdf").unwrap();
         let deal_proposal = DealProposal::builder().build(&file).unwrap();
         let eth_client = EthClient::default();
 
@@ -189,6 +119,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
+        dbg!("Proof Created for Deal ID: {:}", deal_id);
         let deal = eth_client.get_deal(deal_id).await.unwrap();
      
         let target_window: usize = eth_client
@@ -214,7 +145,8 @@ mod tests {
 
         assert_eq!(success_count, 1);
         Ok(())
-    }
+    } 
+    */
     /*
     #[tokio::test]
     async fn one_proof_window_missing () -> Result<(), anyhow::Error>

@@ -58,14 +58,14 @@ pub struct RequestData {
     pub deal_id: DealID,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ResponseData {
     pub deal_id: DealID,
     pub success_count: u64,
     pub num_windows: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MyResult {
     pub data: ResponseData,
     pub status: Status,
