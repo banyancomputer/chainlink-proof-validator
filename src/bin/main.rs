@@ -13,9 +13,7 @@ async fn main() -> Result<()> {
     // TODO command line configuration with clap??
     // TODO use config to handle env variables and conf files!
     dotenv::dotenv().ok();
-    let eth_client = Arc::new(
-        EthClient::default()
-    );
+    let eth_client = Arc::new(EthClient::default());
 
     let _rocket = rocket::build()
         .mount("/", rocket::routes![validate, compute])

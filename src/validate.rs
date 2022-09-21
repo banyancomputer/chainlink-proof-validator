@@ -1,29 +1,4 @@
 /*
-1. when it gets a request, find the deal_id’s info on chain
-2. check that the deal is either FINISHED (current_block_num > deal_start_block
-   + deal_length_in_blocks) or CANCELLED (and do the computations below with
-   deal_length_in_blocks := (agreed_upon_cancellation_block - deal_start).
-3. start iterating over proof_blocks  from window_num \in (0, num_windows),
-   num_windows = ceiling(deal_length_in_blocks / window_size)
-        a. if there isn’t a proof recorded in proof_blocks under that window, continue
-        b. find the proof in that block’s logs, stick it in proof_bytes
-        c. if there is, set target_window_start to window_num * window_size + deal_start_block
-        d. get the target_block_hash as block_hash(target_window_start)
-        e. get the chunk_offset and chunk_size according to the function
-           compute_random_block_choice_from_hash(target_block_hash, deal_info.file_length)
-           defined in my code here: https://github.com/banyancomputer/ipfs-proof-buddy/blob/9f0ae728f7a103da615c5eedf37491267f470e48/src/proof_utils.rs#L17
-           (by the way let’s not copy-paste or reimplement this- let’s make a banyan-shared
-            crate when you get to this)
-        f. validate the proof, and if you pass, increment success_count
-4. then once you get done with iterating over all the proofs, return
-   (success_count, num_windows)  and whatever id/deal_id you need in order
-   to identify the computation performed back to chain
-*/
-
-/* lazy static macro - needs to be thread safe, maybe use to instantiate a provider
-or maybe instance methods
-open provider once
-
 cargo fmt, then cargo check, then cargo clippy
 cargo build - default is debug mode, does overflow checking
 cargo build --release for benchmarking
@@ -38,7 +13,7 @@ use rocket::{
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
-use std::io::{Cursor};
+use std::io::Cursor;
 use std::sync::Arc;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -86,12 +61,6 @@ fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
     })
 }
 
-/* Function to check if the deal is over or not */
-// TODO this needs to go into banyan_shared
-fn deal_over(current_block_num: BlockNum, deal_info: OnChainDealInfo) -> bool {
-    current_block_num > deal_info.deal_start_block + deal_info.deal_length_in_blocks
-}
-
 /// this validates the deal based on a deal_id, returns a json response of either the success count and num_windows,
 /// or an error message to be turned into Json<MyResult> in the caller!
 /// TODO fix logging... :|
@@ -110,9 +79,9 @@ async fn validate_deal_internal(
         .await
         .map_err(|e| format!("Couldn't get most recent block number: {e}"))?;
 
-    // TODO: Why have any of these checks in the API. Shouldn't they all be in the Smart Contract Logic. 
+    // TODO: Why have any of these checks in the API. Shouldn't they all be in the Smart Contract Logic.
 
-    let deal_over = deal_over(current_block_num, deal_info);
+    let deal_over = EthClient::deal_over(current_block_num, deal_info);
     let deal_cancelled = false; // TODO need to figure out how to get this
 
     // this refuses to do the validation computations unless the deal is done with or cancelled
@@ -173,8 +142,10 @@ async fn validate_deal_internal(
                 continue;
             }
         };
-        let (chunk_offset, chunk_size) =
-            proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size.as_u64());
+        let (chunk_offset, chunk_size) = proofs::compute_random_block_choice_from_hash(
+            target_block_hash,
+            deal_info.file_size.as_u64(),
+        );
 
         // TODO is there an issue of coercing the Vec<u8> into a &[u8] here?
         match EthClient::check_if_merkle_proof_is_valid(
@@ -189,7 +160,10 @@ async fn validate_deal_internal(
                 submitted_proof_in_block_num.0, e
             )
         })? {
-            true => success_count += 1,
+            true => {
+                info!("Proof succeeded for window {}", window_num);
+                success_count += 1;
+            }
             false => {
                 info!("Proof failed for window {}", window_num);
                 continue;
