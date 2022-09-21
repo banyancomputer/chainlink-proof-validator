@@ -1,3 +1,5 @@
+#![deny(unused_crate_dependencies)]
+
 // new addr 0xeb3d5882faC966079dcdB909dE9769160a0a00Ac
 #[macro_use]
 extern crate rocket;
