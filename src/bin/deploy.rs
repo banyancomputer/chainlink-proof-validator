@@ -3,9 +3,6 @@ use rust_chainlink_ea_api::validate::MyResult;
 
 use dotenv::dotenv;
 use serde_json::json;
-use std::fs;
-use std::{fs::File, io::Read};
-
 use banyan_shared::types::DealID;
 
 pub async fn rust_chainlink_ea_api_call(deal_id: DealID, api_url: String) -> Result<u64, anyhow::Error> {
@@ -40,7 +37,8 @@ async fn main() -> Result<(), anyhow::Error> {
 //testing
 #[cfg(test)]
 mod tests {
-    use banyan_shared::{eth::{EthClient}, types::{DealID, BlockNum, DealProposal}};
+    use banyan_shared::{eth::{EthClient}, types::{DealID, BlockNum, DealProposal}, deals::DealProposalBuilder};
+    use std::{fs::File, io::{Read,Seek}};
     use super::*;
 
     #[tokio::test]
@@ -106,47 +104,113 @@ mod tests {
         Ok(())
     }
 
-    
-   /*  #[tokio::test]
-    async fn api_one_proofs_test() -> Result<(), anyhow::Error> {
+    #[tokio::test]
+    async fn post_proof_to_chain() -> Result<(), anyhow::Error> {
 
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/filecoin.pdf").unwrap();
-        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
         let eth_client = EthClient::default();
 
-        let deal_id: DealID = eth_client
-            .propose_deal(deal_proposal, None, None)
-            .await
-            .expect("Failed to send deal proposal");
-
-        dbg!("Proof Created for Deal ID: {:}", deal_id);
+        let deal_id = DealID(15);
         let deal = eth_client.get_deal(deal_id).await.unwrap();
-     
+
         let target_window: usize = eth_client
-            .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks, deal.deal_length_in_blocks)
+            .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks)
             .await
             .expect("Failed to compute target window");
-    
-        let target_block = EthClient::compute_target_block_start(deal.deal_start_block, deal.proof_frequency_in_blocks, target_window);
 
+        let target_block = EthClient::compute_target_block_start(
+            deal.deal_start_block,
+            deal.proof_frequency_in_blocks,
+            target_window,
+        );
         // create a proof using the same file we used to create the deal
         let (_hash, proof) = eth_client
             .create_proof_helper(target_block, &mut file, deal.file_size.as_u64(), true)
             .await
             .expect("Failed to create proof");
 
-        let _block_num: BlockNum = eth_client
-            .post_proof(deal_id, proof,None, None)
+        let block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof, target_block, None, None)
             .await
             .expect("Failed to post proof");
-    
+        
+        let proof_bytes: Vec<u8> = match eth_client
+            .get_proof_from_logs(block_num, deal_id)
+            .await?
+            {
+            Some(proof) => proof,
+            None => {
+                panic!("Failed to get proof from logs");
+            }
+        };
+
+        assert_eq!(proof_bytes.len(), 1672);
+        Ok(())
+        
+    }
+
+    #[tokio::test]
+    async fn api_one_proof_test() -> Result<(), anyhow::Error> {
+
+        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let eth_client = EthClient::default();
+
+        let deal_id = DealID(15);
+        let deal = eth_client.get_deal(deal_id).await.unwrap();
+
+        // create a proof for an old deal, and put the proof in the first valid window. Not possible in real life, but convenient for testing. 
+        let (_hash, proof) = eth_client
+            .create_proof_helper(deal.deal_start_block, &mut file, deal.file_size.as_u64(), true)
+            .await
+            .expect("Failed to create proof");
+
+        let _block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof, deal.deal_start_block, None, None)
+            .await
+            .expect("Failed to post proof");
+        
+        let success_count: u64 =
+            rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
+
+        // The deal is two windows long, and only one proof was submitted. 
+        assert_eq!(success_count, 1);
+        Ok(())
+    } 
+
+    #[tokio::test]
+    async fn deal_and_proof_one_window() -> Result<(), anyhow::Error> {
+
+        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+
+        let deal_proposal: DealProposal = DealProposalBuilder::new("0x0000000000000000000000000000000000000000".to_string(), 1, 1, 0.0, 0.0,"0x0000000000000000000000000000000000000000".to_string())
+            .build(&file).unwrap();
+        let eth_client = EthClient::default();
+
+        let deal_id: DealID = eth_client
+            .propose_deal(deal_proposal.clone(), None, None)
+            .await
+            .expect("Failed to send deal proposal");
+
+        let deal = eth_client.get_deal(deal_id).await.unwrap();
+
+        // create a proof using the same file we used to create the deal
+        let (_hash, proof) = eth_client
+            .create_proof_helper(deal.deal_start_block, &mut file, deal.file_size.as_u64(), true)
+            .await
+            .expect("Failed to create proof");
+        
+        let _block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof, deal.deal_start_block, None, None)
+            .await
+            .expect("Failed to post proof");
+        
         let success_count: u64 =
             rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string()).await?;
 
         assert_eq!(success_count, 1);
         Ok(())
-    } 
-    */
+    }
+    
     /*
     #[tokio::test]
     async fn one_proof_window_missing () -> Result<(), anyhow::Error>

@@ -110,6 +110,8 @@ async fn validate_deal_internal(
         .await
         .map_err(|e| format!("Couldn't get most recent block number: {e}"))?;
 
+    // TODO: Why have any of these checks in the API. Shouldn't they all be in the Smart Contract Logic. 
+
     let deal_over = deal_over(current_block_num, deal_info);
     let deal_cancelled = false; // TODO need to figure out how to get this
 
@@ -171,7 +173,6 @@ async fn validate_deal_internal(
                 continue;
             }
         };
-
         let (chunk_offset, chunk_size) =
             proofs::compute_random_block_choice_from_hash(target_block_hash, deal_info.file_size.as_u64());
 
