@@ -97,7 +97,7 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
     let url = format!("{}{}", api_url, api_key);
     let contract_address =
         std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS must be set.");
-    let provider = VitalikProvider::new(url, contract_address, 1)
+    let provider = VitalikProvider::new(url, contract_address)
         .map_err(|e| format!("error with creating provider: {e}"))?;
 
     let deal_info = provider
@@ -141,7 +141,7 @@ async fn validate_deal_internal(deal_id: DealID) -> Result<Json<MyResult>, Strin
             .topic1(H256::from_low_u64_be(deal_id.0));
 
         let block_logs = provider
-            .get_logs_from_filter(filter)
+            .get_logs_from_filter(&filter)
             .await
             .map_err(|e| format!("Couldn't get logs from block {}: {}", block_num.0, e))?;
         let proof_bytes = Cursor::new(&block_logs[0].data);
