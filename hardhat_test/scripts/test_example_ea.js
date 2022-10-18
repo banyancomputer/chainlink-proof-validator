@@ -7,7 +7,7 @@ const { exit } = require("node:process");
 async function main() {
   
   const Test = await ethers.getContractFactory("BlockTime");
-  const test = await Test.attach("0x8BfB349916287410C2e195768f389a81100126ef");
+  const test = await Test.attach("0x8BfB349916287410C2e195768f389a81100126ef"); // change this based on your contract adddress
   console.log(test.address);
 
   let jobId = 'a66c9947b4d94331ae8fd445265bf430';

@@ -1,12 +1,10 @@
 use anyhow::{anyhow, Result};
 use banyan_shared::{eth::EthClient, proofs, proofs::window, types::*};
 use log::info;
-use rocket::{
-    serde::{Deserialize, Serialize},
-};
+use rocket::serde::{Deserialize, Serialize};
+use serde_json::from_str;
 use std::io::Cursor;
 use std::sync::Arc;
-use serde_json::from_str;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ChainlinkRequestData {
@@ -115,7 +113,8 @@ pub(crate) async fn validate_deal_internal(
             .map_err(|e| {
                 anyhow!(
                     "Couldn't get log from block {}: {}",
-                    submitted_proof_in_block_num.0, e
+                    submitted_proof_in_block_num.0,
+                    e
                 )
             })? {
             Some(proof) => proof,
@@ -139,7 +138,8 @@ pub(crate) async fn validate_deal_internal(
         .map_err(|e| {
             anyhow!(
                 "Error reading proof {}: {}",
-                submitted_proof_in_block_num.0, e
+                submitted_proof_in_block_num.0,
+                e
             )
         })? {
             true => {
@@ -170,6 +170,7 @@ pub(crate) async fn validate_deal_internal(
                 num_windows: num_windows as u64,
                 status: 0,
                 result: "No windows found".to_string(),
-        }})
+            },
+        })
     }
 }

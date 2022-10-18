@@ -14,3 +14,6 @@ banyan-shared ={path = "/Users/jonahkaye/Desktop/Banyan/banyan-shared-rs"}
 dotenv = "0.15.0"
 reqwest = "0.11.11"
 log = "0.4.17"
+tokio = "1.21.2"
+rand = "0.8.5"
+ethers = { git = "https://github.com/gakonst/ethers-rs" }
