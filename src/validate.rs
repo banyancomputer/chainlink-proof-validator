@@ -1,36 +1,16 @@
-/*
-cargo fmt, then cargo check, then cargo clippy
-cargo build - default is debug mode, does overflow checking
-cargo build --release for benchmarking
-
-// TODO codecov, cicd
-*/
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use banyan_shared::{eth::EthClient, proofs, proofs::window, types::*};
 use log::info;
 use rocket::{
-    post,
-    serde::{json::Json, Deserialize, Serialize},
-    State,
+    serde::{Deserialize, Serialize},
 };
 use std::io::Cursor;
 use std::sync::Arc;
+use serde_json::from_str;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Status {
-    Success,
-    Failure,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ChainlinkRequest {
-    pub job_run_id: String,
-    pub data: RequestData,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RequestData {
-    pub deal_id: DealID,
+pub struct ChainlinkRequestData {
+    pub deal_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -38,50 +18,51 @@ pub struct ResponseData {
     pub deal_id: DealID,
     pub success_count: u64,
     pub num_windows: u64,
+    pub status: u16,
+    pub result: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MyResult {
+pub struct ChainlinkResponse {
     pub data: ResponseData,
-    pub status: Status,
-    pub result: String,
 }
 pub struct WebserverState(pub Arc<EthClient>);
 
 /* Function to construct an error response to return to Chainlink */
-fn construct_error(deal_id: DealID, reason: String) -> Json<MyResult> {
-    Json(MyResult {
+fn construct_error(deal_id: DealID, reason: String) -> ChainlinkResponse {
+    ChainlinkResponse {
         data: ResponseData {
             deal_id,
             success_count: 0,
             num_windows: 0,
+            status: 0,
+            result: reason,
         },
-        status: Status::Failure,
-        result: reason,
-    })
+    }
 }
 
 /// this validates the deal based on a deal_id, returns a json response of either the success count and num_windows,
-/// or an error message to be turned into Json<MyResult> in the caller!
+/// or an error message to be turned into Json<ChainlinkResponse> in the caller!
 /// TODO fix logging... :|
-async fn validate_deal_internal(
+pub(crate) async fn validate_deal_internal(
     provider: Arc<EthClient>,
-    deal_id: DealID,
-) -> Result<Json<MyResult>, String> {
+    input_data: ChainlinkRequestData,
+) -> Result<ChainlinkResponse> {
+    let deal_id = from_str(&input_data.deal_id)?;
     let deal_info = provider
-        .get_deal(deal_id)
+        .get_offer(deal_id)
         .await
-        .map_err(|e| format!("Error in get_deal: {:?}", e))?;
+        .map_err(|e| anyhow!("Error in get_deal: {:?}", e))?;
 
     // checking that deal is either finished or cancelled
     let current_block_num = provider
         .get_latest_block_num()
         .await
-        .map_err(|e| format!("Couldn't get most recent block number: {e}"))?;
+        .map_err(|e| anyhow!("Couldn't get most recent block number: {e}"))?;
 
     // TODO: Why have any of these checks in the API. Shouldn't they all be in the Smart Contract Logic.
 
-    let deal_over = EthClient::deal_over(current_block_num, deal_info);
+    let deal_over = EthClient::deal_over(current_block_num, deal_info.clone());
     let deal_cancelled = false; // TODO need to figure out how to get this
 
     // this refuses to do the validation computations unless the deal is done with or cancelled
@@ -96,9 +77,10 @@ async fn validate_deal_internal(
     } else {
         deal_info.deal_length_in_blocks
     };
+
     let num_windows =
         window::get_num_windows(deal_length_in_blocks, deal_info.proof_frequency_in_blocks)
-            .map_err(|e| format!("Could not get number of windows: {e}"))?;
+            .map_err(|e| anyhow!("Could not get number of windows: {e}"))?;
 
     // iterating over proof blocks (by window)
     let mut success_count = 0;
@@ -112,13 +94,13 @@ async fn validate_deal_internal(
         let target_block_hash = provider
             .get_block_hash_from_num(target_window_start)
             .await
-            .map_err(|e| format!("Could not get block hash: {e}"))?;
+            .map_err(|e| anyhow!("Could not get block hash: {e}"))?;
 
         let submitted_proof_in_block_num = match provider
             .get_proof_block_num_from_window(deal_id, window_num as u64)
             .await
             .map_err(|e| {
-                format!("Could not get block where proof was submitted for this window: {e}")
+                anyhow!("Could not get block where proof was submitted for this window: {e}")
             })? {
             Some(block_num) => block_num,
             None => {
@@ -131,7 +113,7 @@ async fn validate_deal_internal(
             .get_proof_from_logs(submitted_proof_in_block_num, deal_id)
             .await
             .map_err(|e| {
-                format!(
+                anyhow!(
                     "Couldn't get log from block {}: {}",
                     submitted_proof_in_block_num.0, e
                 )
@@ -155,7 +137,7 @@ async fn validate_deal_internal(
             chunk_size,
         )
         .map_err(|e| {
-            format!(
+            anyhow!(
                 "Error reading proof {}: {}",
                 submitted_proof_in_block_num.0, e
             )
@@ -171,36 +153,23 @@ async fn validate_deal_internal(
         }
     }
     if num_windows > 0 {
-        Ok(Json(MyResult {
+        Ok(ChainlinkResponse {
             data: ResponseData {
                 deal_id,
                 success_count,
                 num_windows: num_windows as u64,
+                status: 1,
+                result: "Ok".to_string(),
             },
-            status: Status::Success,
-            result: "Ok".to_string(),
-        }))
+        })
     } else {
-        Ok(Json(MyResult {
+        Ok(ChainlinkResponse {
             data: ResponseData {
                 deal_id,
                 success_count,
                 num_windows: num_windows as u64,
-            },
-            status: Status::Failure,
-            result: "No windows found".to_string(),
-        }))
+                status: 0,
+                result: "No windows found".to_string(),
+        }})
     }
-}
-
-#[post("/validate", format = "json", data = "<input_data>")]
-pub async fn validate(
-    webserver_state: &State<WebserverState>,
-    input_data: Json<ChainlinkRequest>,
-) -> Json<MyResult> {
-    let deal_id = input_data.into_inner().data.deal_id;
-    let eth_provider = webserver_state.0.clone();
-    validate_deal_internal(eth_provider, deal_id)
-        .await
-        .map_or_else(|e| construct_error(deal_id, e), |v| v)
 }

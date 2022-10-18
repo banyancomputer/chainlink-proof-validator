@@ -79,6 +79,25 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         emit NewOffer(msg.sender, providerAddress, _offerId );
         return _offerId;
     }
+
+     function getOffer(uint256 offerId) public view returns (uint256, uint256, uint256, uint256, uint256, address, string memory, uint256, string memory, address, address, uint8)
+    {
+        Deal storage store = _deals[offerId];
+        return (
+            store.dealStartBlock, 
+            store.dealLengthInBlocks, 
+            store.proofFrequencyInBlocks, 
+            store.price,
+            store.collateral,
+            store.erc20TokenDenomination,
+            store.ipfsFileCID,
+            store.fileSize,
+            store.blake3Checksum,
+            store.creatorCounterpart.partyAddress, 
+            store.providerCounterpart.partyAddress, 
+            uint8(store.offerStatus));
+    }
+    
     function getDeal(uint256 offerID) public view returns (Deal memory) {
             return _deals[offerID];
         }
@@ -121,17 +140,20 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
         return _deals[offerId].dealLengthInBlocks;
     }
 
-    // ISSUE OF block.number in proofs not being the same as the block number the event is emitted to?
-    function saveProof(bytes calldata _proof, uint256 offerId) public {
+    // function that saves time of proof sending
+    function saveProof(bytes calldata _proof, uint256 offerId, uint256 targetBlockNumber) public {
         require(_proof.length > 0, "No proof provided"); // check if proof is empty
         require(_deals[offerId].offerStatus == OfferStatus.OFFER_CREATED, "ERROR: OFFER_NOT_ACTIVE");
-        require(block.number < _deals[offerId].dealStartBlock + _deals[offerId].dealLengthInBlocks && block.number > _deals[offerId].dealStartBlock, "Out of block timerange");
+        require(targetBlockNumber < _deals[offerId].dealStartBlock + _deals[offerId].dealLengthInBlocks && block.number >= _deals[offerId].dealStartBlock, "Out of block timerange");
+        require(block.number >= targetBlockNumber, "Proof cannot be sent in future");
+        require(block.number <= targetBlockNumber + _deals[offerId].proofFrequencyInBlocks, "Saving proof outside of range");
 
-        uint256 offset = block.number - _deals[offerId].dealStartBlock;
+        uint256 offset = targetBlockNumber - _deals[offerId].dealStartBlock;
         require(offset < _deals[offerId].dealLengthInBlocks, "Proof window is over"); // Potentially remove this revert as it is redundant with the above require.
 
-        uint256 proofWindowNumber = offset / _deals[offerId].proofFrequencyInBlocks; // Proofs submit as entries within a range.
-        require(_proofblocks[offerId][proofWindowNumber] != 0, "Proof already submitted");
+        uint256 proofWindowNumber = offset / _deals[offerId].proofFrequencyInBlocks; // Proofs submit as entries within a range, denoted as the nth proofWindow.
+        require(_proofblocks[offerId][proofWindowNumber] == 0, "Proof already submitted");
+        
 
         _proofblocks[offerId][proofWindowNumber] = block.number;
         emit ProofAdded(offerId, _proofblocks[offerId][proofWindowNumber], _proof);
@@ -149,9 +171,9 @@ contract Proofs is ChainlinkClient, ConfirmedOwner {
     /**
      * Receive the response in the form of uint256
      */
-    function fulfill(bytes32 requestId, uint256 _offer_id, uint256 _success_count, uint256 _num_windows, uint16 _status, string calldata _result) public recordChainlinkFulfillment(requestId) {
-        emit RequestVerification(requestId, _offer_id);
-        responses[_offer_id] = ResponseData(_offer_id, _success_count, _num_windows, _status, _result);
+    function fulfill(bytes32 requestId, uint256 offerID, uint256 successCount, uint256 numWindows, uint16 status, string calldata result) public recordChainlinkFulfillment(requestId) {
+        emit RequestVerification(requestId, offerID);
+        responses[offerID] = ResponseData(offerID, successCount, numWindows, status, result);
     }
 
     /**

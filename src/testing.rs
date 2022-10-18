@@ -48,7 +48,7 @@ mod tests {
     };
     use ethers::types::Bytes;
     use std::{
-        fs::File,
+        fs::File, thread::current,
     };
 
     #[tokio::test]
@@ -65,7 +65,7 @@ mod tests {
     /// This tests verifies that a deal with no logged proofs will have a success count of 0
     async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
         let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
-        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let deal_proposal = DealProposal::builder().with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -73,9 +73,10 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        dbg!("Proof Created for Deal ID: {:}", &deal_id);
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        dbg!("Offer Created for Deal ID: {:}", deal_id);
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
         // Assert that the deal we read is the same as the one we sent
+        dbg!("deal {:?}", deal.clone());
         assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
 
         let response_data: MyResult =
@@ -89,7 +90,7 @@ mod tests {
     /// This test verifies that an eth client can create multiple consecutive deals, which all have no logged proofs. 
     async fn multiple_deals_same_file_no_proofs() -> Result<(), anyhow::Error> {
         let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
-        let deal_proposal = DealProposal::builder().build(&file).unwrap();
+        let deal_proposal = DealProposal::builder().with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -98,7 +99,7 @@ mod tests {
             .expect("Failed to send deal proposal");
 
         dbg!("Proof Created for Deal ID: {:}", &deal_id);
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
         // Assert that the deal we read is the same as the one we sent
         assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
 
@@ -107,7 +108,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
         dbg!("Proof Created for Deal ID: {:}", &deal_id_2);
-        let deal = eth_client.get_deal(deal_id_2).await.unwrap();
+        let deal = eth_client.get_offer(deal_id_2).await.unwrap();
         assert_eq!(deal.deal_length_in_blocks, BlockNum(10));
 
         let response_data_1: MyResult =
@@ -122,55 +123,20 @@ mod tests {
     }
 
     #[tokio::test]
-    /// This test verifies that the api can verify a deal with a single proof. WARNING this proof is submitted on an old deal,
-    /// and will fail on the smart contract side when that is working properly. 
-    async fn api_one_proof_test() -> Result<(), anyhow::Error> {
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
-        let eth_client = EthClient::default();
-
-        let deal_id = DealID(15);
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
-
-        // create a proof for an old deal, and put the proof in the first valid window. Not possible in real life, but convenient for testing.
-        let (_hash, proof) = eth_client
-            .create_proof_helper(
-                deal.deal_start_block,
-                &mut file,
-                deal.file_size.as_u64(),
-                true,
-            )
-            .await
-            .expect("Failed to create proof");
-
-        let _block_num: BlockNum = eth_client
-            .post_proof(deal_id, proof, deal.deal_start_block, None, None)
-            .await
-            .expect("Failed to post proof");
-
-        let response_data: MyResult =
-            rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string())
-                .await?;
-
-        // The deal is two windows long, and only one proof was submitted.
-        assert_eq!(response_data.data.success_count, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
     /// This test verifies that we can create a deal with one window, submit a proof, and verify it. 
     async fn deal_and_proof_one_window() -> Result<(), anyhow::Error> {
         let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
-            1,
-            1,
+            3,
+            3,
             0.0,
             0.0,
             "0x0000000000000000000000000000000000000000".to_string(),
         )
-        .build(&file)
-        .unwrap();
+        .with_file(&file).build().unwrap();
+
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -178,8 +144,9 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
 
+        
         // create a proof using the same file we used to create the deal
         let (_hash, proof) = eth_client
             .create_proof_helper(
@@ -191,11 +158,29 @@ mod tests {
             .await
             .expect("Failed to create proof");
 
-        let _block_num: BlockNum = eth_client
-            .post_proof(deal_id, proof, deal.deal_start_block, None, None)
+        // Wait one block until current block is no longer the deal start block 
+        let mut current_block_num = deal.deal_start_block;
+        while current_block_num == deal.deal_start_block {
+            current_block_num = eth_client
+                .get_latest_block_num()
+                .await
+                .expect("Failed to get current block");
+        };
+
+        let target_block = deal.deal_start_block;
+        let block_num: BlockNum = eth_client
+            .post_proof(deal_id, proof, target_block, None, None)
             .await
             .expect("Failed to post proof");
-
+        
+        let mut current_block_num_2 = BlockNum(0);
+        while !EthClient::deal_over(current_block_num_2, deal.clone()) {
+            current_block_num_2 = eth_client
+                .get_latest_block_num()
+                .await
+                .expect("Failed to get current block");
+        }
+        
         let response_data: MyResult =
             rust_chainlink_ea_api_call(deal_id, "http://127.0.0.1:8000/validate".to_string())
                 .await?;
@@ -212,14 +197,13 @@ mod tests {
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
-            2,
-            1,
+            6,
+            3,
             0.0,
             0.0,
             "0x0000000000000000000000000000000000000000".to_string(),
         )
-        .build(&file)
-        .unwrap();
+        .with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -227,7 +211,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
 
         let target_window: usize = eth_client
             .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks)
@@ -240,8 +224,15 @@ mod tests {
             target_window,
         );
 
-        dbg!("deal start block: {}", deal.deal_start_block);
-        dbg!("target block start: {}", target_block);
+        // Wait one block until current block is no longer the deal start block 
+        let mut current_block_num = deal.deal_start_block;
+        while current_block_num == deal.deal_start_block {
+            current_block_num = eth_client
+                .get_latest_block_num()
+                .await
+                .expect("Failed to get current block");
+        };
+
         // create a proof using the same file we used to create the deal
         let (_hash, proof) = eth_client
             .create_proof_helper(target_block, &mut file, deal.file_size.as_u64(), true)
@@ -255,9 +246,9 @@ mod tests {
 
         // Wait for the second window to start
         // checking that deal is either finished or cancelled
-        let mut current_block_num = block_num;
-        while !EthClient::deal_over(current_block_num, deal) {
-            current_block_num = eth_client
+        let mut current_block_num_2 = block_num;
+        while !EthClient::deal_over(current_block_num_2, deal.clone()) {
+            current_block_num_2 = eth_client
                 .get_latest_block_num()
                 .await
                 .expect("Failed to get current block");
@@ -285,8 +276,7 @@ mod tests {
             0.0,
             "0x0000000000000000000000000000000000000000".to_string(),
         )
-        .build(&file)
-        .unwrap();
+        .with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -294,7 +284,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
 
         let target_window: usize = eth_client
             .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks)
@@ -341,7 +331,7 @@ mod tests {
             .expect("Failed to post proof");
 
         current_block_num = block_num_2;
-        while !EthClient::deal_over(current_block_num, deal) {
+        while !EthClient::deal_over(current_block_num, deal.clone()) {
             current_block_num = eth_client
                 .get_latest_block_num()
                 .await
@@ -370,8 +360,7 @@ mod tests {
             0.0,
             "0x0000000000000000000000000000000000000000".to_string(),
         )
-        .build(&file)
-        .unwrap();
+        .with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -379,7 +368,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
 
         let target_window: usize = eth_client
             .compute_target_window(deal.deal_start_block, deal.proof_frequency_in_blocks)
@@ -425,7 +414,7 @@ mod tests {
             .expect("Failed to post proof");
 
         current_block_num = block_num_2;
-        while !EthClient::deal_over(current_block_num, deal) {
+        while !EthClient::deal_over(current_block_num, deal.clone()) {
             current_block_num = eth_client
                 .get_latest_block_num()
                 .await
@@ -453,8 +442,7 @@ mod tests {
             0.0,
             "0x0000000000000000000000000000000000000000".to_string(),
         )
-        .build(&file)
-        .unwrap();
+        .with_file(&file).build().unwrap();
         let eth_client = EthClient::default();
 
         let deal_id: DealID = eth_client
@@ -462,7 +450,7 @@ mod tests {
             .await
             .expect("Failed to send deal proposal");
 
-        let deal = eth_client.get_deal(deal_id).await.unwrap();
+        let deal = eth_client.get_offer(deal_id).await.unwrap();
 
         // create a proof using the same file we used to create the deal
         let proof = Bytes::from(Vec::new());
@@ -473,7 +461,7 @@ mod tests {
             .expect("Failed to post proof");
 
         let mut current_block_num = block_num;
-        while !EthClient::deal_over(current_block_num, deal) {
+        while !EthClient::deal_over(current_block_num, deal.clone()) {
             current_block_num = eth_client
                 .get_latest_block_num()
                 .await

@@ -1,6 +1,7 @@
 {
-    "job_run_id": "12345", 
-    "data": {
-        "offer_id": "2"
+    "id": "12345",
+    "data":
+    {
+        "deal_id": "1"
     }
 }
