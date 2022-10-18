@@ -10,7 +10,7 @@ rocket = { version = "0.5.0-rc.2", features = ["json"] }
 serde = "*"
 serde_json = "*"
 anyhow = {version = "1.0", features = ["std", "backtrace"] }
-banyan-shared ={path = "/Users/jonahkaye/Desktop/Banyan/banyan-shared-rs"}
+banyan-shared ={git = "https://github.com/banyancomputer/banyan-shared-rs"}
 dotenv = "0.15.0"
 reqwest = "0.11.11"
 log = "0.4.17"

@@ -23,14 +23,19 @@ Make sure your ip is permitted in inbound security group settings for AWS Postgr
 
 To launch the API on the localhost: Cargo run 
 
-Create a chainlink job by copying either the ea_job.toml of the example_job.toml into the chainlink node operator UI. Create a bridge in the UI, specifying the name of the bridge in the job (.i.e. rust_proof_verifier), and make sure to specify that the url is a docker internal address: http://host.docker.internal:8000/compute
+Create a chainlink job by copying the example_job.toml into the chainlink node operator UI. Create a bridge in the UI, specifying the name of the bridge in the job (.i.e. rust_proof_verifier), and make sure to specify that the url is a docker internal address: http://host.docker.internal:8000/compute
 
-# usage
+You must deploy the operator.sol contract using the deploy_operator function and call the set_authorized_senders fu
+
+# contract deployment
 Deploy contract using 
 npx hardhat run scripts/deploy.js --network goerli
+Proofs.sol is a test contract. You can see our real contracts at https://github.com/banyancomputer/contracts. Proofs.sol is deployed at 0x8185599b47373dF84CB504cbfA124295FF4F346e. 
 
 Trigger chainlink API contract function for basic testing using 
 npx hardhat run scripts/test_ea.js --network goerli 
+
+Make sure your contract is funded with some testnet link
 
 # testing
 
@@ -40,7 +45,7 @@ cargo test -- --test-threads=1
 
 # Things to know 
 
-Our implementation of the EA for our specific use case looks almost identical to the example EA, which can be found https://github.com/banyancomputer/chainlink-external-adapter-rs/tree/testing-setup. There, you have the option of using forge to deploy your contracts if you are more comfortable with that framework. 
+Our implementation of the EA for our specific use case looks almost identical to the example EA, which can be found https://github.com/banyancomputer/chainlink-external-adapter-rs/tree/testing-setup. 
 
 Our implementation uses an EthClient as our provider for maing calls to chain. We imnplemented this as a wrapper that makes interfacing with the contract ABI making calls that require gas and modify state much easier. You can check out that implementation in https://github.com/banyancomputer/banyan-shared-rs/blob/master/src/eth.rs, THe ABI for the contract is inputted there, which can be found in hardhat_test/artifacts/contracts/Proofs.sol/Proofs.json after deploying the contract. 
 
