@@ -141,7 +141,7 @@ mod tests {
     #[tokio::test]
     /// This tests verifies that a deal with no logged proofs will have a success count of 0
     async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
-        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let file = File::open("test_files/ethereum.pdf").unwrap();
         let deal_proposal = DealProposal::builder().with_file(file).build().unwrap();
         let eth_client = EthClient::default();
 
@@ -166,7 +166,7 @@ mod tests {
     #[tokio::test]
     /// This test verifies that an eth client can create multiple consecutive deals, which all have no logged proofs.
     async fn multiple_deals_same_file_no_proofs() -> Result<(), anyhow::Error> {
-        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let file = File::open("test_files/ethereum.pdf").unwrap();
         let deal_proposal = DealProposal::builder().with_file(file).build().unwrap();
         let eth_client = EthClient::default();
 
@@ -202,7 +202,7 @@ mod tests {
     #[tokio::test]
     /// This test verifies that we can create a deal with one window, submit a proof, and verify it.
     async fn deal_and_proof_one_window() -> Result<(), anyhow::Error> {
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("test_files/ethereum.pdf").unwrap();
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
@@ -271,7 +271,7 @@ mod tests {
     /// This test verifies that we can create a deal with two window, post one proof and simply not post a second, and recieve
     /// A success count of 1.
     async fn one_proof_window_missing() -> Result<(), anyhow::Error> {
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("test_files/ethereum.pdf").unwrap();
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test]
     /// This test verifies that we can submit two correct proofs and get two successes.
     async fn two_correct_proofs() -> Result<(), anyhow::Error> {
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("test_files/ethereum.pdf").unwrap();
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
@@ -432,7 +432,7 @@ mod tests {
     #[tokio::test]
     /// This test verifies that we can get a success count of 1 when submitting one correct proof and one incorrect proof
     async fn one_proof_correct_one_incorrect() -> Result<(), anyhow::Error> {
-        let mut file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let mut file = File::open("test_files/ethereum.pdf").unwrap();
 
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
@@ -517,7 +517,7 @@ mod tests {
     #[tokio::test]
     /// This test verifies that an empty proof will not be counted as a success.
     async fn empty_proof_unsuccessful() -> Result<(), anyhow::Error> {
-        let file = File::open("../Rust-Chainlink-EA-API/test_files/ethereum.pdf").unwrap();
+        let file = File::open("test_files/ethereum.pdf").unwrap();
         let deal_proposal: DealProposal = DealProposalBuilder::new(
             "0x0000000000000000000000000000000000000000".to_string(),
             1,
