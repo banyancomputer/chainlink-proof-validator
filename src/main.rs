@@ -117,6 +117,7 @@ pub async fn rust_chainlink_ea_api_call(
     Ok(res)
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,3 +563,4 @@ mod tests {
         Ok(())
     }
 }
+*/

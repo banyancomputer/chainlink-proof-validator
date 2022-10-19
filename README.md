@@ -39,7 +39,7 @@ Make sure your contract is funded with some testnet link
 
 # testing
 
-To test your Chainlink EA without constantly making calls to chain, use the unit testing functions in main. Note to use a single thread, since concurrency may give you problems with the nonce in your Eth Client. A better longterm solution would be to develop a nonce manager (Pull requests welcome!)
+To test your Chainlink EA without constantly making calls to chain, use the unit testing functions in main. Uncomment them out, and make sure you have your infura API_KEY in your env file. Note to use a single thread, since concurrency may give you problems with the nonce in your Eth Client. A better longterm solution would be to develop a nonce manager (Pull requests welcome!)
 
 cargo test -- --test-threads=1
 
