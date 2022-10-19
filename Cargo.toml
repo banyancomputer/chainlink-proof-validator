@@ -1,5 +1,5 @@
 [package]
-name = "rust_chainlink_ea_api"
+name = "chainlink-proof-validator"
 version = "0.1.0"
 edition = "2021"
 
