@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^0.4.1",
-    "@nomicfoundation/hardhat-toolbox": "^1.0.2",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
     "axios": "^0.27.2",
     "balanced-match": "^1.0.2",
     "brace-expansion": "^1.1.11",
