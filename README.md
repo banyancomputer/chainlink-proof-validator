@@ -1,3 +1,11 @@
+# What is it?
+
+This is a Chainlink External Adaptor written in Rust that computes merkle proofs over deal histories to check if files are accurately being stored over IPFS. 
+
+# What it does? 
+
+It receives calls from a contract on-chain, makes calls to an API, does proof checking, and returns a success rate to chain. 
+
 # initial setup
 install deps
 ```bash
@@ -12,7 +20,7 @@ then add your private key and infura API key to .env
 
 # PreReqs
 
-Follow the instructions to set up a Chainlink EA Node on https://docs.chain.link/docs/running-a-chainlink-node/
+Follow the instructions to set up a Chainlink External Adaptor Node on your local machine in a Docker on https://docs.chain.link/docs/running-a-chainlink-node/
 
 You will need to install Docker, Sqlworkbench, and set up and AWS postgreSQL database. The instructions linked above walk you through this. You will also need to install Hardhat : 
 ```bash
@@ -45,7 +53,10 @@ $ Cargo run
 ```
 Create a Chainlink job by copying the example_job.toml into the Chainlink node operator UI. Create a bridge in the UI, specifying the name of the bridge in the job (.i.e. rust_proof_verifier), and make sure to specify that the url is a docker internal address: http://host.docker.internal:8000/compute
 
-You must deploy the operator.sol contract using the deploy_operator function and call the set_authorized_senders function. 
+You must deploy the operator.sol contract using the deploy_operator function and call the set_authorized_senders function. You can do by subsituting your own node address as the authorized sender when you call this script below
+```bash 
+$ npx hardhat run scripts/deploy_operator.js --network goerli
+```
 
 # contract deployment
 Deploy contract using
@@ -58,8 +69,7 @@ Trigger Chainlink API contract function for basic testing using
 ```bash
 $ npx hardhat run scripts/test_example_ea.js --network goerli 
 ```
-Make sure your contract is funded with some testnet link
-
+Make sure your contract is funded with some testnet link which you can get here https://faucets.chain.link/
 # testing
 
 To test your Chainlink External Adaptor without constantly making calls to chain, use the unit testing functions in main. Uncomment them out, and make sure you have your infura API_KEY in your env file. Note to use a single thread, since concurrency may give you problems with the nonce in your Eth Client. A better longterm solution would be to develop a nonce manager (Pull requests welcome!)
@@ -73,3 +83,4 @@ cargo test -- --test-threads=1
 Our implementation of the External Adaptor for our specific use case looks almost identical to the example EA, which can be found https://github.com/banyancomputer/chainlink-external-adapter-rs/tree/testing-setup. 
 
 Our implementation uses an EthClient as our provider for maing calls to chain. We imnplemented this as a wrapper that makes interfacing with the contract ABI making calls that require gas and modify state much easier. You can check out that implementation in https://github.com/banyancomputer/banyan-shared-rs/blob/master/src/eth.rs, The ABI for the contract is inputted there, which can be found in hardhat_test/artifacts/contracts/Proofs.sol/Proofs.json after deploying the contract. 
+
