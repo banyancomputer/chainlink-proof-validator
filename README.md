@@ -80,7 +80,7 @@ cargo test -- --test-threads=1
 
 # Things to know 
 
-Our implementation of the External Adaptor for our specific use case looks almost identical to the example EA, which can be found https://github.com/banyancomputer/chainlink-external-adapter-rs/tree/testing-setup. 
+Our implementation of the External Adaptor for our specific use case looks almost identical to the example External Adaptor, which can be found https://github.com/banyancomputer/chainlink-external-adapter-rs/tree/testing-setup. 
 
 Our implementation uses an EthClient as our provider for maing calls to chain. We imnplemented this as a wrapper that makes interfacing with the contract ABI making calls that require gas and modify state much easier. You can check out that implementation in https://github.com/banyancomputer/banyan-shared-rs/blob/master/src/eth.rs, The ABI for the contract is inputted there, which can be found in hardhat_test/artifacts/contracts/Proofs.sol/Proofs.json after deploying the contract. 
 
