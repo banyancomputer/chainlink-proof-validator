@@ -137,7 +137,8 @@ mod tests {
         assert_eq!(response_data.data.success_count, 1);
         Ok(())
     }
-
+}
+    /
     #[tokio::test]
     /// This tests verifies that a deal with no logged proofs will have a success count of 0
     async fn api_no_proofs_test() -> Result<(), anyhow::Error> {
